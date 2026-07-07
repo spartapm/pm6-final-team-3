@@ -57,7 +57,9 @@ textarea {
   position: relative;
   display: flex;
   width: 100%;
+  max-width: 560px;
   min-height: 100svh;
+  margin: 0 auto;
   overflow: hidden;
   background:
     radial-gradient(circle at 80% 20%, rgba(255, 209, 149, 0.12), transparent 15rem),
@@ -1345,6 +1347,10 @@ button.calendar-cell {
 }
 
 @media (max-width: 480px) {
+  .screen-shell {
+    max-width: none;
+  }
+
   .screen-scroll {
     padding-right: 21px;
     padding-left: 21px;
