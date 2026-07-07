@@ -242,7 +242,7 @@ export default function HaruFairyApp() {
   }
 
   return (
-    <main className="app-frame">
+    <main>
       <section className="screen-shell">
         <div className="screen-scroll">
           {activeTab === "home" && (
