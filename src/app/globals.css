@@ -960,12 +960,14 @@ button.calendar-cell {
 }
 
 .bottom-nav {
-  position: absolute;
+  position: fixed;
   z-index: 6;
-  right: 0;
   bottom: 0;
-  left: 0;
+  left: 50%;
   display: grid;
+  width: 100%;
+  max-width: 560px;
+  transform: translateX(-50%);
   grid-template-columns: repeat(5, 1fr);
   align-items: end;
   border-top: 1px solid rgba(180, 166, 255, 0.1);
@@ -1348,6 +1350,10 @@ button.calendar-cell {
 
 @media (max-width: 480px) {
   .screen-shell {
+    max-width: none;
+  }
+
+  .bottom-nav {
     max-width: none;
   }
 
