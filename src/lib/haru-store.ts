@@ -35,6 +35,25 @@ export type AppData = {
   schedules: AppSchedule[];
 };
 
+export async function upsertProfile(input: {
+  userId: string;
+  nickname: string;
+  avatarUrl?: string | null;
+  provider?: string | null;
+}) {
+  const { error } = await supabase.from("profiles").upsert({
+    user_id: input.userId,
+    nickname: input.nickname,
+    avatar_url: input.avatarUrl ?? null,
+    provider: input.provider ?? "kakao",
+    updated_at: new Date().toISOString(),
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
 type MemoRow = {
   id: string;
   memo_date: string;

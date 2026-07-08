@@ -16,6 +16,30 @@
   --mint: #99e7c6;
   --amber: #ffd195;
   --danger: #ff9eb5;
+  --screen-x: 32px;
+  --screen-top: 42px;
+  --screen-bottom: 128px;
+  --section-gap: 24px;
+  --card-radius: 24px;
+  --card-padding: 24px;
+  --card-border: 1px solid rgba(180, 166, 255, 0.2);
+  --card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 18px 34px rgba(5, 4, 14, 0.26);
+  --font-display: 30px;
+  --font-title: 24px;
+  --font-subtitle: 18px;
+  --font-body: 15px;
+  --font-caption: 13px;
+  --font-micro: 12px;
+  --line-display: 1.16;
+  --line-title: 1.25;
+  --line-body: 1.55;
+  --track-tight: -0.04em;
+  --weight-title: 950;
+  --weight-body: 760;
+  --weight-label: 900;
+  --button-radius: 18px;
+  --button-height: 54px;
 }
 
 * {
@@ -35,6 +59,9 @@ body {
   background:
     radial-gradient(circle at 50% 0%, rgba(153, 141, 255, 0.2), transparent 34rem),
     #0f0d1e;
+  font-size: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -45,12 +72,25 @@ textarea {
 
 button {
   cursor: pointer;
+  color: inherit;
 }
 
 button,
 input,
 textarea {
   border: 0;
+}
+
+button:disabled,
+input:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+a,
+button {
+  -webkit-tap-highlight-color: transparent;
 }
 
 .screen-shell {
@@ -103,8 +143,14 @@ textarea {
   z-index: 1;
   flex: 1;
   overflow-y: auto;
-  padding: 34px 24px 112px;
+  padding: var(--screen-top) var(--screen-x) var(--screen-bottom);
   scrollbar-width: none;
+}
+
+.screen-scroll.auth-only {
+  display: flex;
+  align-items: center;
+  padding-bottom: var(--screen-top);
 }
 
 .screen-scroll::-webkit-scrollbar {
@@ -112,7 +158,7 @@ textarea {
 }
 
 .space-y-6 > * + * {
-  margin-top: 24px;
+  margin-top: var(--section-gap);
 }
 
 .home-header {
@@ -126,30 +172,19 @@ textarea {
 .page-header h1 {
   margin: 0;
   color: var(--text);
-  font-size: 25px;
-  font-weight: 900;
-  letter-spacing: -0.04em;
+  font-size: var(--font-display);
+  font-weight: var(--weight-title);
+  line-height: var(--line-display);
+  letter-spacing: var(--track-tight);
 }
 
 .home-header p,
 .page-header p {
   margin: 6px 0 0;
   color: var(--muted);
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.streak-badge {
-  margin-top: 6px;
-  border: 1px solid rgba(255, 209, 149, 0.24);
-  border-radius: 18px;
-  background: rgba(255, 209, 149, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
-  color: #ffd9ad;
-  padding: 10px 13px;
-  font-size: 14px;
-  font-weight: 900;
-  white-space: nowrap;
+  font-size: var(--font-body);
+  line-height: var(--line-body);
+  font-weight: var(--weight-body);
 }
 
 .status-copy {
@@ -159,8 +194,9 @@ textarea {
   background: rgba(255, 255, 255, 0.07);
   color: #dcd7ff;
   padding: 12px 14px;
-  font-size: 13px;
-  font-weight: 850;
+  font-size: var(--font-caption);
+  line-height: var(--line-body);
+  font-weight: var(--weight-label);
 }
 
 .status-copy.error {
@@ -175,11 +211,9 @@ textarea {
 .result-card,
 .memo-card,
 .my-card {
-  border: 1px solid var(--line);
+  border: var(--card-border);
   background: var(--panel);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 18px 34px rgba(5, 4, 14, 0.26);
+  box-shadow: var(--card-shadow);
   backdrop-filter: blur(18px);
 }
 
@@ -187,9 +221,9 @@ textarea {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 14px;
-  border-radius: 25px;
-  padding: 15px;
+  gap: 18px;
+  border-radius: var(--card-radius);
+  padding: 18px;
   color: var(--text);
   text-align: left;
   transition: 160ms ease;
@@ -229,17 +263,19 @@ textarea {
 
 .ai-entry-copy strong {
   display: block;
-  font-size: 16px;
-  font-weight: 900;
-  letter-spacing: -0.04em;
+  font-size: var(--font-subtitle);
+  line-height: var(--line-title);
+  font-weight: var(--weight-title);
+  letter-spacing: var(--track-tight);
 }
 
 .ai-entry-copy small {
   display: block;
   margin-top: 4px;
   color: #d3cef0;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--font-caption);
+  line-height: 1.4;
+  font-weight: var(--weight-body);
 }
 
 .chat-bubble-icon {
@@ -261,9 +297,9 @@ textarea {
   display: grid;
   width: 100%;
   grid-template-columns: 1.2fr 1fr;
-  gap: 18px;
-  border-radius: 24px;
-  padding: 18px;
+  gap: 20px;
+  border-radius: var(--card-radius);
+  padding: var(--card-padding);
   color: var(--text);
   text-align: left;
 }
@@ -275,8 +311,10 @@ textarea {
 .mini-month h2 {
   margin: 0 0 14px;
   text-align: center;
-  font-size: 17px;
-  font-weight: 900;
+  font-size: var(--font-subtitle);
+  line-height: var(--line-title);
+  font-weight: var(--weight-title);
+  letter-spacing: var(--track-tight);
 }
 
 .week-header,
@@ -289,8 +327,8 @@ textarea {
 .week-header {
   margin-bottom: 8px;
   color: #9189b5;
-  font-size: 11px;
-  font-weight: 900;
+  font-size: var(--font-micro);
+  font-weight: var(--weight-label);
 }
 
 .week-header span:first-child {
@@ -317,8 +355,8 @@ textarea {
   place-items: center;
   border-radius: 999px;
   color: #d8d2f0;
-  font-size: 13px;
-  font-weight: 800;
+  font-size: var(--font-caption);
+  font-weight: var(--weight-body);
 }
 
 button.calendar-cell {
@@ -368,13 +406,15 @@ button.calendar-cell {
 }
 
 .large-date strong {
-  font-size: 30px;
-  font-weight: 950;
+  font-size: var(--font-display);
+  line-height: var(--line-display);
+  font-weight: var(--weight-title);
 }
 
 .large-date span {
   color: var(--muted);
-  font-weight: 900;
+  font-size: var(--font-caption);
+  font-weight: var(--weight-label);
 }
 
 .schedule-line {
@@ -394,22 +434,24 @@ button.calendar-cell {
 }
 
 .schedule-line strong {
-  font-size: 15px;
+  font-size: var(--font-body);
+  line-height: 1.35;
   font-style: normal;
-  font-weight: 900;
+  font-weight: var(--weight-label);
 }
 
 .schedule-line small {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--font-micro);
+  line-height: 1.35;
+  font-weight: var(--weight-body);
 }
 
 .todo-card {
   position: relative;
-  border-radius: 24px;
-  padding: 24px;
+  border-radius: var(--card-radius);
+  padding: var(--card-padding);
 }
 
 .card-title-row {
@@ -425,9 +467,10 @@ button.calendar-cell {
 
 .card-title-row h2 {
   margin: 0;
-  font-size: 20px;
-  font-weight: 950;
-  letter-spacing: -0.04em;
+  font-size: var(--font-subtitle);
+  line-height: var(--line-title);
+  font-weight: var(--weight-title);
+  letter-spacing: var(--track-tight);
 }
 
 .card-title-row span {
@@ -435,13 +478,14 @@ button.calendar-cell {
   background: rgba(153, 231, 198, 0.18);
   color: var(--mint);
   padding: 7px 12px;
-  font-size: 13px;
-  font-weight: 900;
+  font-size: var(--font-caption);
+  line-height: 1.2;
+  font-weight: var(--weight-label);
 }
 
 .todo-list {
   display: grid;
-  gap: 16px;
+  gap: 18px;
 }
 
 .todo-row {
@@ -464,7 +508,7 @@ button.calendar-cell {
   border-radius: 8px;
   color: #1e2433;
   font-size: 18px;
-  font-weight: 950;
+  font-weight: var(--weight-title);
 }
 
 .todo-row span.checked {
@@ -475,7 +519,9 @@ button.calendar-cell {
 .todo-row em {
   color: #eeeaff;
   font-style: normal;
-  font-weight: 850;
+  font-size: var(--font-body);
+  line-height: 1.38;
+  font-weight: var(--weight-body);
 }
 
 .todo-row em.done {
@@ -490,19 +536,19 @@ button.calendar-cell {
   background: rgba(76, 68, 136, 0.38);
   color: #c8c0ff;
   padding: 12px 16px;
-  font-size: 13px;
-  font-weight: 900;
+  font-size: var(--font-caption);
+  font-weight: var(--weight-label);
 }
 
 .page-stack {
   position: relative;
   display: grid;
-  gap: 20px;
+  gap: var(--section-gap);
 }
 
 .page-header {
   display: grid;
-  gap: 4px;
+  gap: 6px;
 }
 
 .page-header.centered {
@@ -531,21 +577,28 @@ button.calendar-cell {
 }
 
 .month-card {
-  border-radius: 26px;
-  padding: 22px 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 10px 0 0;
+  backdrop-filter: none;
 }
 
 .schedule-list-section {
   display: grid;
   gap: 12px;
+  border-top: 1px solid rgba(180, 166, 255, 0.16);
+  padding-top: 20px;
 }
 
 .section-eyebrow,
 .date-heading {
   margin: 0;
   color: #cbc5e7;
-  font-size: 15px;
-  font-weight: 900;
+  font-size: var(--font-body);
+  line-height: var(--line-body);
+  font-weight: var(--weight-label);
 }
 
 .schedule-card {
@@ -554,11 +607,12 @@ button.calendar-cell {
   grid-template-columns: 5px 62px 1fr;
   align-items: center;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 17px;
+  border: var(--card-border);
+  border-radius: 18px;
   background: rgba(55, 47, 102, 0.74);
   color: var(--text);
   text-align: left;
+  box-shadow: var(--card-shadow);
 }
 
 .schedule-card > span {
@@ -569,18 +623,23 @@ button.calendar-cell {
 .schedule-card strong {
   padding-left: 14px;
   color: #c8c0ff;
-  font-size: 14px;
+  font-size: var(--font-caption);
+  line-height: 1.25;
+  font-weight: var(--weight-label);
 }
 
 .schedule-card em {
   font-style: normal;
-  font-weight: 900;
+  font-size: var(--font-body);
+  line-height: 1.35;
+  font-weight: var(--weight-label);
 }
 
 .floating-plus {
-  position: sticky;
-  bottom: 10px;
-  justify-self: end;
+  position: fixed;
+  z-index: 7;
+  right: max(24px, calc((100vw - 560px) / 2 + var(--screen-x)));
+  bottom: 118px;
   display: grid;
   width: 56px;
   height: 56px;
@@ -590,7 +649,7 @@ button.calendar-cell {
   box-shadow: 0 0 26px rgba(170, 161, 255, 0.5);
   color: #241e4d;
   font-size: 26px;
-  font-weight: 900;
+  font-weight: var(--weight-title);
 }
 
 .floating-plus .ui-icon {
@@ -600,14 +659,14 @@ button.calendar-cell {
 
 .chat-layout {
   display: flex;
-  min-height: calc(100svh - 190px);
+  min-height: calc(100svh - var(--screen-top) - var(--screen-bottom));
   flex-direction: column;
 }
 
 .message-list {
   display: grid;
-  gap: 14px;
-  margin-top: 26px;
+  gap: 16px;
+  margin-top: 34px;
 }
 
 .message-row {
@@ -623,22 +682,25 @@ button.calendar-cell {
 .message-row p {
   max-width: 78%;
   margin: 0;
-  border-radius: 19px;
-  padding: 13px 15px;
-  line-height: 1.55;
-  font-size: 14px;
-  font-weight: 800;
+  border-radius: 20px;
+  padding: 16px 18px;
+  line-height: var(--line-body);
+  font-size: var(--font-body);
+  font-weight: var(--weight-body);
 }
 
 .message-row.ai p {
   border-bottom-left-radius: 5px;
-  background: rgba(255, 255, 255, 0.12);
+  border: var(--card-border);
+  background: rgba(55, 47, 102, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .message-row.user p {
   border-bottom-right-radius: 5px;
   background: var(--primary);
   color: #241e4d;
+  box-shadow: 0 10px 24px rgba(170, 161, 255, 0.28);
 }
 
 .ai-avatar {
@@ -659,25 +721,30 @@ button.calendar-cell {
   background: rgba(75, 67, 135, 0.5);
   padding: 13px;
   color: #e9e4ff;
-  font-size: 13px;
-  font-weight: 850;
+  font-size: var(--font-caption);
+  line-height: 1.4;
+  font-weight: var(--weight-label);
 }
 
 .finish-chat-button {
   margin-top: auto;
-  border-radius: 18px;
+  border: var(--card-border);
+  border-radius: var(--button-radius);
   background: rgba(170, 161, 255, 0.22);
   color: #dfd9ff;
-  padding: 15px;
-  font-weight: 950;
+  min-height: var(--button-height);
+  padding: 0 18px;
+  font-size: var(--font-body);
+  font-weight: var(--weight-title);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .chat-input-bar {
   display: flex;
   gap: 10px;
   margin-top: 12px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
+  border: var(--card-border);
+  border-radius: 22px;
   background: rgba(255, 255, 255, 0.1);
   padding: 9px;
 }
@@ -698,10 +765,10 @@ button.calendar-cell {
 .chat-input-bar button {
   width: 42px;
   height: 42px;
-  border-radius: 14px;
+  border-radius: 50%;
   background: var(--primary);
   color: #241e4d;
-  font-weight: 950;
+  font-weight: var(--weight-title);
 }
 
 .chat-input-bar button:disabled {
@@ -709,8 +776,8 @@ button.calendar-cell {
 }
 
 .result-card {
-  border-radius: 23px;
-  padding: 19px;
+  border-radius: var(--card-radius);
+  padding: var(--card-padding);
 }
 
 .result-card > div:first-child {
@@ -723,9 +790,10 @@ button.calendar-cell {
 
 .result-card h2 {
   margin: 0;
-  font-size: 19px;
-  font-weight: 950;
-  letter-spacing: -0.04em;
+  font-size: var(--font-subtitle);
+  line-height: var(--line-title);
+  font-weight: var(--weight-title);
+  letter-spacing: var(--track-tight);
 }
 
 .result-card button {
@@ -733,15 +801,16 @@ button.calendar-cell {
   background: rgba(255, 255, 255, 0.08);
   color: #cfc8ff;
   padding: 8px 11px;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: var(--font-micro);
+  font-weight: var(--weight-label);
 }
 
 .result-card p {
   margin: 0;
   color: #d9d3f0;
+  font-size: var(--font-body);
   line-height: 1.7;
-  font-weight: 750;
+  font-weight: var(--weight-body);
 }
 
 .readonly-todos {
@@ -756,7 +825,9 @@ button.calendar-cell {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-weight: 850;
+  font-size: var(--font-body);
+  line-height: 1.45;
+  font-weight: var(--weight-body);
 }
 
 .readonly-todos span {
@@ -780,7 +851,9 @@ button.calendar-cell {
 .suggestion-card small {
   margin-top: 4px;
   color: var(--muted);
-  font-weight: 800;
+  font-size: var(--font-caption);
+  line-height: 1.4;
+  font-weight: var(--weight-body);
 }
 
 .suggestion-card div {
@@ -797,12 +870,16 @@ button.calendar-cell {
 
 .primary-action,
 .secondary-action {
-  display: block;
-  border-radius: 18px;
-  padding: 15px 18px;
+  display: grid;
+  min-height: var(--button-height);
+  place-items: center;
+  border-radius: var(--button-radius);
+  padding: 0 18px;
   text-align: center;
   text-decoration: none;
-  font-weight: 950;
+  font-size: var(--font-body);
+  line-height: 1.2;
+  font-weight: var(--weight-title);
 }
 
 .primary-action {
@@ -811,6 +888,7 @@ button.calendar-cell {
 }
 
 .secondary-action {
+  border: 1px solid rgba(180, 166, 255, 0.18);
   background: rgba(255, 255, 255, 0.08);
   color: #ddd7ff;
 }
@@ -825,30 +903,35 @@ button.calendar-cell {
 }
 
 .segmented-control {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.08);
-  padding: 5px;
+  display: flex;
+  width: fit-content;
+  gap: 12px;
 }
 
 .segmented-control button {
-  border-radius: 14px;
+  min-width: 94px;
+  border: 1px solid rgba(180, 166, 255, 0.26);
+  border-radius: 999px;
   background: transparent;
   color: var(--muted);
-  padding: 12px;
-  font-weight: 950;
+  padding: 13px 18px;
+  font-size: var(--font-body);
+  line-height: 1.2;
+  font-weight: var(--weight-title);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .segmented-control button.active {
   background: var(--primary);
   color: #241e4d;
+  border-color: transparent;
+  box-shadow: 0 10px 22px rgba(170, 161, 255, 0.24);
 }
 
 .record-list {
   position: relative;
   display: grid;
-  gap: 28px;
+  gap: 30px;
 }
 
 .record-date-group {
@@ -860,8 +943,9 @@ button.calendar-cell {
   display: grid;
   grid-template-columns: 1fr 40px;
   align-items: center;
-  border-radius: 20px;
-  padding: 17px;
+  min-height: 92px;
+  border-radius: var(--card-radius);
+  padding: 20px 18px 20px 24px;
 }
 
 .memo-card button {
@@ -872,8 +956,10 @@ button.calendar-cell {
 
 .memo-card strong {
   display: block;
-  font-size: 17px;
-  font-weight: 950;
+  font-size: var(--font-subtitle);
+  line-height: var(--line-title);
+  font-weight: var(--weight-title);
+  letter-spacing: var(--track-tight);
 }
 
 .memo-card p {
@@ -883,9 +969,9 @@ button.calendar-cell {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   color: #bcb5d8;
-  line-height: 1.55;
-  font-size: 14px;
-  font-weight: 750;
+  line-height: var(--line-body);
+  font-size: var(--font-body);
+  font-weight: var(--weight-body);
 }
 
 .more-button {
@@ -910,16 +996,55 @@ button.calendar-cell {
 
 .my-card {
   display: grid;
-  justify-items: center;
+  justify-items: stretch;
   gap: 14px;
-  border-radius: 28px;
-  padding: 34px 24px;
+  border-radius: var(--card-radius);
+  padding: var(--card-padding);
+  text-align: left;
+}
+
+.auth-gate {
+  display: grid;
+  width: 100%;
+  gap: 16px;
+}
+
+.auth-card {
+  justify-items: center;
+  gap: 18px;
+  padding: 34px 26px;
   text-align: center;
 }
 
+.auth-logo {
+  display: grid;
+  width: 86px;
+  height: 86px;
+  place-items: center;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.16), transparent 2rem),
+    rgba(170, 161, 255, 0.14);
+  box-shadow: 0 0 30px rgba(170, 161, 255, 0.22);
+}
+
+.auth-card h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--font-title);
+  line-height: var(--line-title);
+  font-weight: var(--weight-title);
+  letter-spacing: var(--track-tight);
+}
+
+.auth-card p {
+  max-width: 280px;
+  margin: -6px 0 8px;
+}
+
 .profile-orb {
-  width: 78px;
-  height: 78px;
+  width: 74px;
+  height: 74px;
   border-radius: 50%;
   background: rgba(170, 161, 255, 0.2);
   color: var(--primary);
@@ -932,6 +1057,14 @@ button.calendar-cell {
   height: 36px;
 }
 
+.profile-summary {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
 .profile-orb.fairy {
   overflow: hidden;
   background:
@@ -941,16 +1074,18 @@ button.calendar-cell {
 
 .my-card h2 {
   margin: 0;
-  font-size: 23px;
-  font-weight: 950;
-  letter-spacing: -0.04em;
+  font-size: var(--font-title);
+  line-height: var(--line-title);
+  font-weight: var(--weight-title);
+  letter-spacing: var(--track-tight);
 }
 
 .my-card p {
-  margin: 0 0 10px;
+  margin: 5px 0 0;
   color: var(--muted);
-  line-height: 1.55;
-  font-weight: 800;
+  font-size: var(--font-body);
+  line-height: var(--line-body);
+  font-weight: var(--weight-body);
 }
 
 .my-card .primary-action,
@@ -965,11 +1100,14 @@ button.calendar-cell {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  border-radius: 18px;
+  min-height: var(--button-height);
+  border-radius: var(--button-radius);
   background: #fee500;
   color: #191600;
-  padding: 15px 18px;
-  font-weight: 950;
+  padding: 0 18px;
+  font-size: var(--font-body);
+  line-height: 1.2;
+  font-weight: var(--weight-title);
   box-shadow: 0 12px 24px rgba(254, 229, 0, 0.14);
 }
 
@@ -992,7 +1130,7 @@ button.calendar-cell {
   border-top: 1px solid rgba(180, 166, 255, 0.1);
   background: rgba(17, 15, 33, 0.94);
   box-shadow: 0 -18px 34px rgba(4, 3, 12, 0.34);
-  padding: 11px 18px 19px;
+  padding: 12px 18px 20px;
   backdrop-filter: blur(18px);
 }
 
@@ -1000,11 +1138,11 @@ button.calendar-cell {
   display: grid;
   justify-items: center;
   gap: 4px;
-  border-radius: 18px;
+  border-radius: var(--button-radius);
   background: transparent;
   color: #716a8f;
   padding: 8px 4px;
-  font-weight: 950;
+  font-weight: var(--weight-label);
 }
 
 .bottom-nav button span {
@@ -1022,8 +1160,9 @@ button.calendar-cell {
 }
 
 .bottom-nav button small {
-  font-size: 12px;
-  font-weight: 950;
+  font-size: var(--font-micro);
+  line-height: 1.2;
+  font-weight: var(--weight-label);
 }
 
 .bottom-nav button.active {
@@ -1094,8 +1233,10 @@ button.calendar-cell {
 .modal-header h2,
 .edit-topbar strong {
   margin: 0;
-  font-size: 22px;
-  font-weight: 950;
+  font-size: var(--font-subtitle);
+  line-height: var(--line-title);
+  font-weight: var(--weight-title);
+  letter-spacing: var(--track-tight);
 }
 
 .modal-header button,
@@ -1104,7 +1245,8 @@ button.calendar-cell {
   background: rgba(255, 255, 255, 0.08);
   color: #dfd9ff;
   padding: 9px 12px;
-  font-weight: 900;
+  font-size: var(--font-caption);
+  font-weight: var(--weight-label);
 }
 
 .edit-topbar .back-button {
@@ -1124,8 +1266,9 @@ button.calendar-cell {
   display: block;
   margin: 16px 0 8px;
   color: #cbc5e7;
-  font-size: 14px;
-  font-weight: 950;
+  font-size: var(--font-caption);
+  line-height: 1.3;
+  font-weight: var(--weight-label);
 }
 
 .field-input,
@@ -1139,6 +1282,9 @@ button.calendar-cell {
   color: var(--text);
   outline: 0;
   padding: 14px;
+  font-size: var(--font-body);
+  line-height: var(--line-body);
+  font-weight: var(--weight-body);
 }
 
 .field-input::placeholder,
@@ -1155,8 +1301,8 @@ button.calendar-cell {
 .field-error {
   margin: 6px 0 0;
   color: var(--danger);
-  font-size: 12px;
-  font-weight: 850;
+  font-size: var(--font-micro);
+  font-weight: var(--weight-label);
 }
 
 .date-field-grid {
@@ -1178,14 +1324,17 @@ button.calendar-cell {
 .field-box small {
   display: block;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 850;
+  font-size: var(--font-micro);
+  line-height: 1.25;
+  font-weight: var(--weight-body);
 }
 
 .field-box strong {
   display: block;
   margin-top: 5px;
-  font-weight: 950;
+  font-size: var(--font-body);
+  line-height: 1.3;
+  font-weight: var(--weight-title);
 }
 
 .weekday-pills {
@@ -1199,7 +1348,8 @@ button.calendar-cell {
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.08);
   color: #dcd7ff;
-  font-weight: 950;
+  font-size: var(--font-caption);
+  font-weight: var(--weight-title);
 }
 
 .weekday-pills button.active {
@@ -1225,8 +1375,9 @@ button.calendar-cell {
 .toggle-row small {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--font-micro);
+  line-height: 1.35;
+  font-weight: var(--weight-body);
 }
 
 .toggle-row > span {
@@ -1268,7 +1419,8 @@ button.calendar-cell {
 .date-chip {
   margin-bottom: 16px;
   color: #ded8ff;
-  font-weight: 950;
+  font-size: var(--font-body);
+  font-weight: var(--weight-title);
 }
 
 .editor-body,
@@ -1311,7 +1463,6 @@ button.calendar-cell {
   height: 17px;
 }
 
-.signup-hero,
 .simple-modal {
   display: grid;
   justify-items: center;
@@ -1319,7 +1470,6 @@ button.calendar-cell {
   text-align: center;
 }
 
-.signup-hero div,
 .simple-modal div {
   display: grid;
   width: 70px;
@@ -1329,12 +1479,7 @@ button.calendar-cell {
   background: rgba(170, 161, 255, 0.18);
   color: var(--primary);
   font-size: 32px;
-  font-weight: 950;
-}
-
-.signup-hero div .logo-mark {
-  width: 62px;
-  height: 62px;
+  font-weight: var(--weight-title);
 }
 
 .simple-modal div .ui-icon {
@@ -1342,27 +1487,29 @@ button.calendar-cell {
   height: 34px;
 }
 
-.signup-hero h2,
 .simple-modal h2 {
   margin: 0;
-  font-size: 23px;
-  font-weight: 950;
+  font-size: var(--font-title);
+  line-height: var(--line-title);
+  font-weight: var(--weight-title);
+  letter-spacing: var(--track-tight);
 }
 
-.signup-hero p,
 .simple-modal p {
   margin: 0 0 14px;
   color: var(--muted);
-  line-height: 1.55;
-  font-weight: 800;
+  font-size: var(--font-body);
+  line-height: var(--line-body);
+  font-weight: var(--weight-body);
 }
 
 .empty-copy,
 .empty-state {
   margin: 0;
   color: var(--muted);
-  font-size: 14px;
-  font-weight: 850;
+  font-size: var(--font-body);
+  line-height: var(--line-body);
+  font-weight: var(--weight-body);
 }
 
 .empty-state {

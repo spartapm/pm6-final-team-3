@@ -10,6 +10,7 @@ import {
   createTodo,
   loadAppData,
   updateTodoCompleted,
+  upsertProfile,
   type AppMemo,
   type AppProfile,
   type AppSchedule,
@@ -26,8 +27,6 @@ type ModalType =
   | "todoEdit"
   | "manualMemo"
   | "manualTodo"
-  | "signup"
-  | "signupDone"
   | "saved"
   | "cancel";
 
@@ -39,6 +38,21 @@ type Message = {
   id: number;
   from: "user" | "ai";
   text: string;
+};
+type AiSummary = {
+  memo: {
+    title: string;
+    body: string;
+  };
+  todos: string[];
+  schedule: {
+    title: string;
+    date: string;
+    startTime: string | null;
+    endTime: string | null;
+    isAllDay: boolean;
+    color: string;
+  } | null;
 };
 type ScheduleFormPayload = {
   title: string;
@@ -72,16 +86,9 @@ type IconName =
   | "kakao"
   | "alert";
 
-const today = {
-  dateKey: "2026-06-30",
-  day: 30,
-  dateLabel: "6월 30일 화요일",
-  shortDate: "6.30",
-  weekday: "화",
-};
-
 const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
-const monthDays = [31, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 1, 2, 3, 4];
+const today = getTodayInfo();
+const monthDays = buildMonthDays(today.year, today.monthIndex);
 
 const initialMessages: Message[] = [
   {
@@ -89,32 +96,7 @@ const initialMessages: Message[] = [
     from: "ai",
     text: "안녕하세요, 저는 AI요정 하루예요. 오늘 있었던 일과 내일 해야 할 일을 편하게 말해주세요.",
   },
-  {
-    id: 2,
-    from: "user",
-    text: "오늘 스터디 준비했고 내일 치과 예약 확인해야 해. 보고서 초안도 써야 하고 조금 피곤했어.",
-  },
-  {
-    id: 3,
-    from: "ai",
-    text: "좋아요. 오늘의 감정과 내일 할 일, 일정 후보를 나눠서 정리해둘게요.",
-  },
 ];
-
-const summaryMemo = {
-  title: "바쁘지만 알차던 하루",
-  body: "오전엔 해야 할 일이 많아 피곤했지만, 스터디 준비를 마치며 성취감을 느꼈어요. 내일은 치과 예약 확인과 보고서 초안을 먼저 처리하면 마음이 한결 가벼워질 거예요.",
-};
-
-const summaryTodos = ["보고서 초안 작성", "치과 예약 확인", "운동복 챙기기"];
-const summarySchedule: Schedule = {
-  id: "summary-schedule",
-  title: "치과 예약",
-  date: today.dateKey,
-  time: "내일 15:00",
-  color: "#FFD195",
-  isAllDay: false,
-};
 
 const navItems: Array<{ tab: Tab; label: string; icon: IconName }> = [
   { tab: "home", label: "홈", icon: "home" },
@@ -125,7 +107,7 @@ const navItems: Array<{ tab: Tab; label: string; icon: IconName }> = [
 ];
 
 export default function HaruFairyApp() {
-  const [activeTab, setActiveTab] = useState<Tab>("home");
+  const [activeTab, setActiveTab] = useState<Tab>("my");
   const [recordMode, setRecordMode] = useState<RecordMode>("memo");
   const [chatDone, setChatDone] = useState(false);
   const [modal, setModal] = useState<ModalType | null>(null);
@@ -136,9 +118,12 @@ export default function HaruFairyApp() {
   const [memos, setMemos] = useState<Memo[]>([]);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [messageDraft, setMessageDraft] = useState("");
-  const [selectedDate, setSelectedDate] = useState(29);
+  const [summary, setSummary] = useState<AiSummary | null>(null);
+  const [selectedDate, setSelectedDate] = useState(today.day);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
   const [appError, setAppError] = useState<string | null>(null);
 
   const todaysTodos = todos.filter((todo) => todo.date === today.dateKey);
@@ -147,29 +132,53 @@ export default function HaruFairyApp() {
   );
   const completedCount = todaysTodos.filter((todo) => todo.done).length;
   const totalCompletedCount = todos.filter((todo) => todo.done).length;
-  const selectedDateKey = `2026-06-${String(selectedDate).padStart(2, "0")}`;
+  const selectedDateKey = formatDateKey(today.year, today.monthIndex, selectedDate);
   const selectedSchedules = schedules.filter(
     (schedule) => schedule.date === selectedDateKey,
   );
-  const selectedWeekday = getJune2026Weekday(selectedDate);
+  const selectedWeekday = getWeekdayForDateKey(selectedDateKey);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      void applySession(data.session);
-    });
+    let mounted = true;
+
+    async function syncInitialSession() {
+      const code = new URLSearchParams(window.location.search).get("code");
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        if (error) {
+          setAppError(getErrorMessage(error));
+        }
+      }
+
+      const { data } = await supabase.auth.getSession();
+      if (mounted) {
+        void applySession(data.session, { shouldGoHome: Boolean(data.session) });
+      }
+    }
+
+    void syncInitialSession();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      void applySession(session);
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      window.setTimeout(() => {
+        void applySession(session, {
+          shouldGoHome: event === "SIGNED_IN" || event === "TOKEN_REFRESHED",
+        });
+      }, 0);
     });
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
 
-  async function applySession(nextSession: Session | null) {
+  async function applySession(
+    nextSession: Session | null,
+    options: { shouldGoHome?: boolean } = {},
+  ) {
     setSession(nextSession);
     setIsLoggedIn(Boolean(nextSession));
     setAppError(null);
@@ -179,6 +188,7 @@ export default function HaruFairyApp() {
       setMemos([]);
       setTodos([]);
       setSchedules([]);
+      setActiveTab("my");
       setIsLoadingData(false);
       return;
     }
@@ -186,11 +196,21 @@ export default function HaruFairyApp() {
     setIsLoadingData(true);
 
     try {
+      const authProfile = getProfileFromSession(nextSession);
+      await upsertProfile({
+        userId: nextSession.user.id,
+        nickname: authProfile.nickname,
+        avatarUrl: authProfile.avatarUrl,
+        provider: getProviderFromSession(nextSession),
+      });
       const data = await loadAppData(nextSession.user.id);
-      setProfile(data.profile);
+      setProfile(normalizeProfile(data.profile, authProfile));
       setMemos(data.memos);
       setTodos(data.todos);
       setSchedules(data.schedules);
+      if (options.shouldGoHome) {
+        setActiveTab("home");
+      }
     } catch (error) {
       setAppError(getErrorMessage(error));
     } finally {
@@ -199,21 +219,17 @@ export default function HaruFairyApp() {
   }
 
   const calendarCells = useMemo(() => {
-    const scheduledDays = new Set(
-      schedules
-        .map((schedule) => Number(schedule.date.split("-")[2]))
-        .filter((day) => Number.isFinite(day)),
-    );
+    const scheduledDates = new Set(schedules.map((schedule) => schedule.date));
 
-    return monthDays.map((day, index) => ({
-      id: `${day}-${index}`,
-      day,
-      muted: index === 0 || index > 30,
-      today: day === today.day && index === 30,
-      selected: day === selectedDate && !((day === today.day && index !== 30) || index === 0),
-      hasSchedule: scheduledDays.has(day),
+    return monthDays.map((cell) => ({
+      id: cell.dateKey,
+      day: cell.day,
+      muted: cell.muted,
+      today: cell.dateKey === today.dateKey,
+      selected: cell.dateKey === selectedDateKey,
+      hasSchedule: scheduledDates.has(cell.dateKey),
     }));
-  }, [schedules, selectedDate]);
+  }, [schedules, selectedDateKey]);
 
   async function toggleTodo(id: string) {
     const target = todos.find((todo) => todo.id === id);
@@ -240,27 +256,97 @@ export default function HaruFairyApp() {
     }
   }
 
-  function sendMessage() {
+  async function sendMessage() {
     const text = messageDraft.trim();
     if (!text) {
       return;
     }
 
-    setMessages((current) => [
-      ...current,
+    if (!requireUserId()) {
+      return;
+    }
+
+    const nextMessages: Message[] = [
+      ...messages,
       { id: Date.now(), from: "user", text },
-      {
-        id: Date.now() + 1,
-        from: "ai",
-        text: "좋아요. 메모와 체크리스트, 일정 후보로 정리할 수 있는 내용이에요.",
-      },
-    ]);
+    ];
+
+    setMessages(nextMessages);
     setMessageDraft("");
+    setIsSendingMessage(true);
+    setAppError(null);
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "chat", messages: nextMessages }),
+      });
+      const data = (await response.json()) as { reply?: string; error?: string };
+
+      if (!response.ok || !data.reply) {
+        throw new Error(data.error || "AI 응답을 불러오지 못했어요.");
+      }
+
+      const reply = data.reply;
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        { id: Date.now() + 1, from: "ai", text: reply },
+      ]);
+    } catch (error) {
+      setAppError(getErrorMessage(error));
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: Date.now() + 1,
+          from: "ai",
+          text: "지금은 답변을 불러오지 못했어요. 잠시 후 다시 시도해주세요.",
+        },
+      ]);
+    } finally {
+      setIsSendingMessage(false);
+    }
+  }
+
+  async function finishChat() {
+    if (!requireUserId()) {
+      return;
+    }
+
+    setIsSummarizing(true);
+    setAppError(null);
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "summary",
+          messages,
+          today: today.dateKey,
+        }),
+      });
+      const data = (await response.json()) as {
+        summary?: AiSummary;
+        error?: string;
+      };
+
+      if (!response.ok || !data.summary) {
+        throw new Error(data.error || "정리 결과를 만들지 못했어요.");
+      }
+
+      setSummary(data.summary);
+      setChatDone(true);
+    } catch (error) {
+      setAppError(getErrorMessage(error));
+    } finally {
+      setIsSummarizing(false);
+    }
   }
 
   async function saveSummary() {
     const userId = requireUserId();
-    if (!userId) {
+    if (!userId || !summary) {
       return;
     }
 
@@ -269,12 +355,12 @@ export default function HaruFairyApp() {
         createMemo({
           userId,
           date: today.dateKey,
-          title: summaryMemo.title,
-          body: summaryMemo.body,
+          title: summary.memo.title,
+          body: summary.memo.body,
           source: "ai",
         }),
         Promise.all(
-          summaryTodos.map((text) =>
+          summary.todos.map((text) =>
             createTodo({
               userId,
               date: today.dateKey,
@@ -283,30 +369,34 @@ export default function HaruFairyApp() {
             }),
           ),
         ),
-        createSchedule({
-          userId,
-          date: today.dateKey,
-          title: summarySchedule.title,
-          startTime: "15:00",
-          endTime: "16:00",
-          isAllDay: false,
-          color: summarySchedule.color,
-          source: "ai",
-        }),
+        summary.schedule
+          ? createSchedule({
+              userId,
+              date: summary.schedule.date,
+              title: summary.schedule.title,
+              startTime: summary.schedule.startTime,
+              endTime: summary.schedule.endTime,
+              isAllDay: summary.schedule.isAllDay,
+              color: summary.schedule.color,
+              source: "ai",
+            })
+          : Promise.resolve(null),
       ]);
 
       await createChatSummary({
         userId,
         conversation: messages,
-        memoTitle: summaryMemo.title,
-        memoBody: summaryMemo.body,
-        todos: summaryTodos,
-        scheduleSuggestions: [summarySchedule],
+        memoTitle: summary.memo.title,
+        memoBody: summary.memo.body,
+        todos: summary.todos,
+        scheduleSuggestions: summary.schedule ? [summary.schedule] : [],
       });
 
       setMemos((current) => [memo, ...current]);
       setTodos((current) => [...createdTodos, ...current]);
-      setSchedules((current) => [schedule, ...current]);
+      if (schedule) {
+        setSchedules((current) => [schedule, ...current]);
+      }
       setModal("saved");
     } catch (error) {
       setAppError(getErrorMessage(error));
@@ -346,15 +436,16 @@ export default function HaruFairyApp() {
   async function signOut() {
     await supabase.auth.signOut();
     setIsLoggedIn(false);
+    setActiveTab("my");
   }
 
   return (
     <main>
       <section className="screen-shell">
-        <div className="screen-scroll">
+        <div className={`screen-scroll ${session ? "" : "auth-only"}`}>
           {activeTab === "home" && (
             <HomeScreen
-              userName={profile?.nickname ?? "지원"}
+              userName={profile?.nickname ?? getProfileFromSession(session).nickname}
               isLoading={isLoadingData}
               error={appError}
               todos={todaysTodos}
@@ -374,6 +465,8 @@ export default function HaruFairyApp() {
 
           {activeTab === "calendar" && (
             <CalendarScreen
+              monthTitle={today.monthTitle}
+              monthName={today.monthName}
               calendarCells={calendarCells}
               schedules={selectedSchedules}
               selectedDate={selectedDate}
@@ -387,11 +480,14 @@ export default function HaruFairyApp() {
           {activeTab === "chat" && (
             <ChatScreen
               messages={messages}
+              summary={summary}
               draft={messageDraft}
               chatDone={chatDone}
+              isSending={isSendingMessage}
+              isSummarizing={isSummarizing}
               onDraft={setMessageDraft}
               onSend={sendMessage}
-              onFinish={() => setChatDone(true)}
+              onFinish={finishChat}
               onSave={saveSummary}
               onEditMemo={() => setModal("memoEdit")}
               onEditTodo={() => setModal("todoEdit")}
@@ -415,14 +511,15 @@ export default function HaruFairyApp() {
 
           {activeTab === "my" && (
             <MyScreen
+              userName={profile?.nickname ?? getProfileFromSession(session).nickname}
               isLoggedIn={isLoggedIn}
-              onSignup={() => setModal("signup")}
+              error={appError}
               onLogin={signInWithKakao}
               onLogout={signOut}
             />
           )}
         </div>
-        <BottomNav activeTab={activeTab} onTab={setActiveTab} />
+        {session && <BottomNav activeTab={activeTab} onTab={setActiveTab} />}
       </section>
 
       {modal === "scheduleCreate" && (
@@ -467,6 +564,7 @@ export default function HaruFairyApp() {
         <EditorModal
           kind="memo"
           title="메모"
+          summary={summary}
           onClose={() => setModal("cancel")}
           onSave={async () => closeModal()}
         />
@@ -476,6 +574,7 @@ export default function HaruFairyApp() {
         <EditorModal
           kind="todo"
           title="할 일"
+          summary={summary}
           onClose={() => setModal("cancel")}
           onSave={async () => closeModal()}
         />
@@ -536,26 +635,6 @@ export default function HaruFairyApp() {
             } catch (error) {
               setAppError(getErrorMessage(error));
             }
-          }}
-        />
-      )}
-
-      {modal === "signup" && (
-        <SignupModal
-          onClose={() => setModal("cancel")}
-          onSubmit={() => setModal("signupDone")}
-        />
-      )}
-
-      {modal === "signupDone" && (
-        <SimpleModal
-          icon="✓"
-          title="가입 완료"
-          description="하루 요정 시작 준비가 끝났어요."
-          actionLabel="확인"
-          onAction={() => {
-            setIsLoggedIn(true);
-            closeModal();
           }}
         />
       )}
@@ -626,7 +705,6 @@ function HomeScreen({
           <h1>안녕하세요, {userName}님</h1>
           <p>{today.dateLabel}</p>
         </div>
-        <span className="streak-badge">🔥 5일째</span>
       </header>
 
       {isLoading && <p className="status-copy">기록을 불러오는 중이에요...</p>}
@@ -643,7 +721,7 @@ function HomeScreen({
 
       <button className="calendar-summary-card" onClick={onCalendar}>
         <div className="mini-month">
-          <h2>6월</h2>
+          <h2>{today.monthName}</h2>
           <WeekHeader />
           <CalendarGrid cells={calendarCells} mini />
         </div>
@@ -667,7 +745,7 @@ function HomeScreen({
           <h2>오늘의 할 일</h2>
           <span>{completedCount}/{todos.length} 완료</span>
         </button>
-        <TodoList todos={todos} onToggle={onToggleTodo} />
+        <TodoList todos={todos} onToggle={onToggleTodo} emptyText="등록된 할 일이 없습니다" />
         <button className="ghost-add-button" onClick={onAddTodo}>
           + 할 일 추가
         </button>
@@ -677,6 +755,8 @@ function HomeScreen({
 }
 
 function CalendarScreen({
+  monthTitle,
+  monthName,
   calendarCells,
   schedules,
   selectedDate,
@@ -685,6 +765,8 @@ function CalendarScreen({
   onCreate,
   onEdit,
 }: {
+  monthTitle: string;
+  monthName: string;
   calendarCells: Array<{
     id: string;
     day: number;
@@ -706,7 +788,7 @@ function CalendarScreen({
         <button className="nav-arrow prev" aria-label="이전 월">
           <Icon name="chevron" />
         </button>
-        <h1>2026년 6월</h1>
+        <h1>{monthTitle}</h1>
         <button className="nav-arrow" aria-label="다음 월">
           <Icon name="chevron" />
         </button>
@@ -735,7 +817,7 @@ function CalendarScreen({
 
       <section className="schedule-list-section">
         <p className="section-eyebrow">
-          6월 {selectedDate}일 {selectedWeekday}요일 · 일정 {schedules.length}개
+          {monthName} {selectedDate}일 {selectedWeekday}요일 · 일정 {schedules.length}개
         </p>
         {schedules.length > 0 ? (
           schedules.map((schedule) => (
@@ -759,8 +841,11 @@ function CalendarScreen({
 
 function ChatScreen({
   messages,
+  summary,
   draft,
   chatDone,
+  isSending,
+  isSummarizing,
   onDraft,
   onSend,
   onFinish,
@@ -770,50 +855,56 @@ function ChatScreen({
   onEditSchedule,
 }: {
   messages: Message[];
+  summary: AiSummary | null;
   draft: string;
   chatDone: boolean;
+  isSending: boolean;
+  isSummarizing: boolean;
   onDraft: (value: string) => void;
-  onSend: () => void;
-  onFinish: () => void;
+  onSend: () => Promise<void>;
+  onFinish: () => Promise<void>;
   onSave: () => void;
   onEditMemo: () => void;
   onEditTodo: () => void;
   onEditSchedule: () => void;
 }) {
-  if (chatDone) {
+  if (chatDone && summary) {
     return (
       <div className="page-stack">
         <header className="page-header">
-          <h1>오늘의 기록이 완성됐어요 ✨</h1>
+          <h1>오늘의 기록이 완성됐어요</h1>
           <p>AI가 대화를 바탕으로 작성했어요. 확인하고 저장해주세요.</p>
         </header>
 
-        <ResultCard title={summaryMemo.title} onEdit={onEditMemo}>
-          <p>{summaryMemo.body}</p>
+        <ResultCard title={summary.memo.title} onEdit={onEditMemo}>
+          <p>{summary.memo.body}</p>
         </ResultCard>
 
-        <ResultCard title="to-do list" onEdit={onEditTodo}>
-          <ul className="readonly-todos">
-            {summaryTodos.map((todo) => (
-              <li key={todo}>
-                <span />
-                {todo}
-              </li>
-            ))}
-          </ul>
-        </ResultCard>
+        {summary.todos.length > 0 && (
+          <ResultCard title="할 일 정리" onEdit={onEditTodo}>
+            <ul className="readonly-todos">
+              {summary.todos.map((todo) => (
+                <li key={todo}>
+                  <span />
+                  {todo}
+                </li>
+              ))}
+            </ul>
+          </ResultCard>
+        )}
 
-        <ResultCard title="일정 등록 제안" onEdit={onEditSchedule}>
-          <div className="suggestion-card">
-            <strong>{summarySchedule.title}</strong>
-            <small>6/30(화) 오후 3:00</small>
-            <p>이 일정을 캘린더에 등록할까요?</p>
-            <div>
-              <button>무시</button>
-              <button className="primary">등록</button>
+        {summary.schedule && (
+          <ResultCard title="일정 등록 제안" onEdit={onEditSchedule}>
+            <div className="suggestion-card">
+              <strong>{summary.schedule.title}</strong>
+              <small>
+                {formatKoreanDate(summary.schedule.date)}
+                {summary.schedule.startTime ? ` ${summary.schedule.startTime}` : " 종일"}
+              </small>
+              <p>이 일정을 캘린더에 등록할까요?</p>
             </div>
-          </div>
-        </ResultCard>
+          </ResultCard>
+        )}
 
         <button className="primary-action bottom-space" onClick={onSave}>
           저장하고 완료
@@ -837,23 +928,37 @@ function ChatScreen({
           </div>
         ))}
 
-        <div className="extract-card">
-          <span>📆 일정 · 치과 6/30 15:00</span>
-          <span>✅ 할 일 · 보고서 초안</span>
-        </div>
+        {isSending && (
+          <div className="message-row ai">
+            <span className="ai-avatar"><LogoMark compact /></span>
+            <p>하루 요정이 답변을 쓰고 있어요...</p>
+          </div>
+        )}
+
+        {messages.some((message) => message.from === "user") && (
+          <div className="extract-card">
+            <span>대화에서 메모, 할 일, 일정 후보를 찾고 있어요</span>
+            <span>대화를 마치면 정리 결과를 확인할 수 있어요</span>
+          </div>
+        )}
       </section>
 
-      <button className="finish-chat-button" onClick={onFinish}>
-        대화 마치고 정리하기
+      <button
+        className="finish-chat-button"
+        onClick={onFinish}
+        disabled={isSending || isSummarizing}
+      >
+        {isSummarizing ? "AI가 정리하는 중..." : "대화 마치고 정리하기"}
       </button>
 
       <div className="chat-input-bar">
         <input
           value={draft}
           placeholder="답장을 입력하세요"
+          disabled={isSending}
           onChange={(event) => onDraft(event.target.value)}
         />
-        <button disabled={!draft.trim()} onClick={onSend} aria-label="메시지 전송">
+        <button disabled={!draft.trim() || isSending} onClick={onSend} aria-label="메시지 전송">
           <Icon name="send" />
         </button>
       </div>
@@ -924,10 +1029,10 @@ function RecordsScreen({
       ) : (
         <section className="todo-card record-todo">
           <div className="card-title-row">
-            <h2>6월 30일 할 일</h2>
+            <h2>{today.monthName} {today.day}일 할 일</h2>
             <span>{completedCount}/{todos.length} 완료</span>
           </div>
-          <TodoList todos={todos} onToggle={onToggleTodo} />
+          <TodoList todos={todos} onToggle={onToggleTodo} emptyText="등록된 할 일이 없습니다" />
           <button className="floating-plus" onClick={onTodoWrite} aria-label="할 일 작성">
             <Icon name="plus" />
           </button>
@@ -938,53 +1043,65 @@ function RecordsScreen({
 }
 
 function MyScreen({
+  userName,
   isLoggedIn,
-  onSignup,
+  error,
   onLogin,
   onLogout,
 }: {
+  userName: string;
   isLoggedIn: boolean;
-  onSignup: () => void;
+  error: string | null;
   onLogin: () => void;
   onLogout: () => void;
 }) {
+  if (!isLoggedIn) {
+    return (
+      <div className="auth-gate">
+        {error && <p className="status-copy error">{error}</p>}
+        <section className="my-card auth-card">
+          <div className="auth-logo">
+            <LogoMark />
+          </div>
+          <h1>하루 요정 시작하기</h1>
+          <p>카카오로 로그인하고 오늘의 기록을 안전하게 저장해요.</p>
+          <button className="kakao-action" onClick={onLogin}>
+            <Icon name="kakao" />
+            카카오로 시작하기
+          </button>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="page-stack">
       <header className="page-header">
         <h1>마이</h1>
       </header>
 
-      {isLoggedIn ? (
-        <section className="my-card">
+      {error && <p className="status-copy error">{error}</p>}
+
+      <section className="my-card">
+        <div className="profile-summary">
           <div className="profile-orb fairy"><LogoMark compact /></div>
-          <h2>지원님 안녕하세요.</h2>
-          <p>오늘도 하루 요정과 함께해요.</p>
-          <a
-            href="https://docs.google.com/forms/d/e/1FAIpQLScmNvKEFQuF5Nwt0e5gpu22BnR7clz_DgQgpDzdWhL_B41YPw/viewform"
-            target="_blank"
-            rel="noreferrer"
-            className="primary-action"
-          >
-            리뷰 남기기
-          </a>
-          <button className="secondary-action" onClick={onLogout}>
-            로그아웃
-          </button>
-        </section>
-      ) : (
-        <section className="my-card">
-          <div className="profile-orb"><Icon name="user" /></div>
-          <h2>로그인하고 기록을 지켜요</h2>
-          <p>여러 기기에서 동기화하고 안전하게 백업해요</p>
-          <button className="kakao-action" onClick={onLogin}>
-            <Icon name="kakao" />
-            카카오로 시작하기
-          </button>
-          <button className="secondary-action" onClick={onSignup}>
-            회원가입
-          </button>
-        </section>
-      )}
+          <div>
+            <h2>{userName}님 안녕하세요.</h2>
+            <p>오늘도 하루 요정과 함께해요.</p>
+          </div>
+        </div>
+        <a
+          href="https://docs.google.com/forms/d/e/1FAIpQLScmNvKEFQuF5Nwt0e5gpu22BnR7clz_DgQgpDzdWhL_B41YPw/viewform"
+          target="_blank"
+          rel="noreferrer"
+          className="primary-action"
+        >
+          리뷰 남기기
+        </a>
+        <button className="secondary-action" onClick={onLogout}>
+          로그아웃
+        </button>
+      </section>
     </div>
   );
 }
@@ -1048,12 +1165,14 @@ function ScheduleLine({ schedule }: { schedule: Schedule }) {
 function TodoList({
   todos,
   onToggle,
+  emptyText = "등록된 항목이 없습니다",
 }: {
   todos: Todo[];
   onToggle: (id: string) => void;
+  emptyText?: string;
 }) {
   if (todos.length === 0) {
-    return <EmptyState text="등록된 일정이 없습니다" />;
+    return <EmptyState text={emptyText} />;
   }
 
   return (
@@ -1081,7 +1200,7 @@ function ResultCard({
     <section className="result-card">
       <div>
         <h2>{title}</h2>
-        <button onClick={onEdit}>✎ 수정</button>
+        <button onClick={onEdit}>수정</button>
       </div>
       {children}
     </section>
@@ -1152,14 +1271,14 @@ function ScheduleModal({
         <input
           className="field-input"
           name="title"
-          defaultValue={compact ? "치과 예약" : ""}
+          defaultValue=""
           placeholder="일정 제목"
           maxLength={30}
           required
         />
         <div className="date-field-grid">
-          <FieldBox label="시작일(화)" value={today.dateKey} />
-          <FieldBox label="종료일(화)" value={today.dateKey} />
+          <FieldBox label={`시작일(${today.weekday})`} value={today.dateKey} />
+          <FieldBox label={`종료일(${today.weekday})`} value={today.dateKey} />
         </div>
         {!compact && (
           <>
@@ -1203,15 +1322,20 @@ function EditorModal({
   kind,
   title,
   manual = false,
+  summary,
   onClose,
   onSave,
 }: {
   kind: "memo" | "todo";
   title: string;
   manual?: boolean;
+  summary?: AiSummary | null;
   onClose: () => void;
   onSave: (payload: EditorSavePayload) => Promise<void>;
 }) {
+  const initialMemo = manual ? null : summary?.memo;
+  const initialTodos = manual ? [""] : summary?.todos.length ? summary.todos : [""];
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -1262,12 +1386,12 @@ function EditorModal({
           <div className="editor-body">
             <input
               name="title"
-              defaultValue={manual ? "" : summaryMemo.title}
+              defaultValue={initialMemo?.title ?? ""}
               placeholder="제목"
             />
             <textarea
               name="body"
-              defaultValue={manual ? "" : summaryMemo.body}
+              defaultValue={initialMemo?.body ?? ""}
               placeholder="내용을 입력하세요."
               rows={8}
               required
@@ -1275,7 +1399,7 @@ function EditorModal({
           </div>
         ) : (
           <div className="todo-editor">
-            {(manual ? [""] : summaryTodos).map((todo, index) => (
+            {initialTodos.map((todo, index) => (
               <div key={`${todo}-${index}`}>
                 <span />
                 <input name="todo" defaultValue={todo} placeholder="할 일을 입력하세요." />
@@ -1286,39 +1410,6 @@ function EditorModal({
           </div>
         )}
       </form>
-    </ModalShell>
-  );
-}
-
-function SignupModal({
-  onClose,
-  onSubmit,
-}: {
-  onClose: () => void;
-  onSubmit: () => void;
-}) {
-  return (
-    <ModalShell>
-      <div className="edit-topbar">
-        <button className="back-button" onClick={onClose} aria-label="뒤로가기">
-          <Icon name="chevron" />
-        </button>
-        <strong>회원가입</strong>
-        <span />
-      </div>
-      <div className="signup-hero">
-        <div><LogoMark /></div>
-        <h2>하루 요정 시작하기</h2>
-        <p>닉네임과 비밀번호로 계정을 만들어요</p>
-      </div>
-      <input className="field-input" placeholder="사용할 아이디" />
-      <p className="field-error">이미 사용 중인 아이디예요.</p>
-      <input className="field-input" placeholder="사용할 닉네임" />
-      <input className="field-input error" placeholder="비밀번호 입력" type="password" maxLength={4} />
-      <p className="field-error">비밀번호는 숫자 4자리만 가능해요.</p>
-      <button className="primary-action full" onClick={onSubmit}>
-        가입하기
-      </button>
     </ModalShell>
   );
 }
@@ -1404,17 +1495,71 @@ function FieldBox({ label, value }: { label: string; value: string }) {
   );
 }
 
-function getJune2026Weekday(day: number) {
-  if (day === 29) {
-    return "일";
+function getTodayInfo() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const monthIndex = date.getMonth();
+  const day = date.getDate();
+  const weekday = weekdays[date.getDay()];
+  const monthName = `${monthIndex + 1}월`;
+
+  return {
+    year,
+    monthIndex,
+    day,
+    dateKey: formatDateKey(year, monthIndex, day),
+    dateLabel: `${monthName} ${day}일 ${weekday}요일`,
+    shortDate: `${monthIndex + 1}.${day}`,
+    weekday,
+    monthName,
+    monthTitle: `${year}년 ${monthName}`,
+  };
+}
+
+function buildMonthDays(year: number, monthIndex: number) {
+  const firstDay = new Date(year, monthIndex, 1).getDay();
+  const lastDate = new Date(year, monthIndex + 1, 0).getDate();
+  const previousLastDate = new Date(year, monthIndex, 0).getDate();
+  const cells: Array<{ day: number; dateKey: string; muted: boolean }> = [];
+
+  for (let index = firstDay - 1; index >= 0; index -= 1) {
+    const day = previousLastDate - index;
+    cells.push({
+      day,
+      dateKey: formatDateKey(year, monthIndex - 1, day),
+      muted: true,
+    });
   }
 
-  if (day === 30) {
-    return "화";
+  for (let day = 1; day <= lastDate; day += 1) {
+    cells.push({
+      day,
+      dateKey: formatDateKey(year, monthIndex, day),
+      muted: false,
+    });
   }
 
-  const labels = ["일", "월", "화", "수", "목", "금", "토"];
-  return labels[(day - 1) % 7];
+  const nextMonthDayCount = Math.ceil(cells.length / 7) * 7 - cells.length;
+  for (let day = 1; day <= nextMonthDayCount; day += 1) {
+    cells.push({
+      day,
+      dateKey: formatDateKey(year, monthIndex + 1, day),
+      muted: true,
+    });
+  }
+
+  return cells;
+}
+
+function formatDateKey(year: number, monthIndex: number, day: number) {
+  const date = new Date(year, monthIndex, day);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const dateDay = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${dateDay}`;
+}
+
+function getWeekdayForDateKey(dateKey: string) {
+  return weekdays[new Date(`${dateKey}T00:00:00`).getDay()];
 }
 
 function groupMemosByDate(memos: Memo[]) {
@@ -1431,8 +1576,8 @@ function groupMemosByDate(memos: Memo[]) {
 
 function formatKoreanDate(date: string) {
   const separator = date.includes(".") ? "." : "-";
-  const [, month, day] = date.split(separator);
-  return `2026년 ${Number(month)}월 ${Number(day)}일`;
+  const [year, month, day] = date.split(separator);
+  return `${Number(year)}년 ${Number(month)}월 ${Number(day)}일`;
 }
 
 function getErrorMessage(error: unknown) {
@@ -1443,11 +1588,61 @@ function getErrorMessage(error: unknown) {
   return "일시적인 오류가 발생했어요. 다시 시도해주세요.";
 }
 
+function getProfileFromSession(session: Session | null): AppProfile {
+  const metadata = session?.user.user_metadata ?? {};
+  const nickname =
+    cleanNickname(readMetadataText(metadata, "name")) ??
+    cleanNickname(readMetadataText(metadata, "nickname")) ??
+    cleanNickname(readMetadataText(metadata, "full_name")) ??
+    cleanNickname(readMetadataText(metadata, "preferred_username")) ??
+    getEmailName(session?.user.email) ??
+    "사용자";
+
+  return {
+    nickname,
+    avatarUrl:
+      readMetadataText(metadata, "avatar_url") ??
+      readMetadataText(metadata, "picture") ??
+      null,
+  };
+}
+
+function normalizeProfile(profile: AppProfile | null, authProfile: AppProfile) {
+  return {
+    nickname: cleanNickname(profile?.nickname) ?? authProfile.nickname,
+    avatarUrl: profile?.avatarUrl ?? authProfile.avatarUrl,
+  };
+}
+
+function cleanNickname(value?: string | null) {
+  const nickname = value?.trim();
+  if (!nickname || nickname === "지원") {
+    return null;
+  }
+
+  return nickname;
+}
+
+function getProviderFromSession(session: Session) {
+  return typeof session.user.app_metadata.provider === "string"
+    ? session.user.app_metadata.provider
+    : "kakao";
+}
+
+function readMetadataText(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function getEmailName(email?: string | null) {
+  return email?.split("@")[0] || null;
+}
+
 function LogoMark({ compact = false }: { compact?: boolean }) {
   return (
     <Image
       className={compact ? "logo-mark compact" : "logo-mark"}
-      src="/logo.png"
+      src="/logo.svg"
       alt="하루 요정 로고"
       width={compact ? 34 : 54}
       height={compact ? 34 : 54}

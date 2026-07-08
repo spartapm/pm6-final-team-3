@@ -1,9 +1,11 @@
 -- Haru Fairy (team-final-3) Supabase setup
 -- Run this once in the Supabase SQL editor.
+-- If this project schema already exists, do not rerun this whole file.
+-- Apply only the needed migration file instead.
 
 create table if not exists profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
-  nickname text not null default '지원',
+  nickname text not null default '사용자',
   avatar_url text,
   provider text,
   created_at timestamptz not null default now(),
@@ -148,11 +150,16 @@ begin
     coalesce(
       new.raw_user_meta_data ->> 'name',
       new.raw_user_meta_data ->> 'nickname',
+      new.raw_user_meta_data ->> 'full_name',
+      new.raw_user_meta_data ->> 'preferred_username',
       split_part(new.email, '@', 1),
-      '지원'
+      '사용자'
     ),
-    new.raw_user_meta_data ->> 'avatar_url',
-    new.app_metadata ->> 'provider'
+    coalesce(
+      new.raw_user_meta_data ->> 'avatar_url',
+      new.raw_user_meta_data ->> 'picture'
+    ),
+    new.raw_app_meta_data ->> 'provider'
   )
   on conflict (user_id) do update
     set nickname = excluded.nickname,

@@ -15,7 +15,8 @@ This MVP intentionally does not use environment variables for Supabase client co
 - Kakao login button calls `supabase.auth.signInWithOAuth({ provider: "kakao" })`.
 - App watches Supabase auth session via `onAuthStateChange`.
 - Logout calls `supabase.auth.signOut()`.
-- Provided butterfly logo is stored at `public/logo.png` and used in the UI.
+- Provided butterfly logo is stored at `public/logo.svg` and used in the UI.
+- AI chat calls the server route with `OPENAI_API_KEY` configured in the runtime environment.
 
 ## Required Supabase Console Setup
 
