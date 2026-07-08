@@ -329,11 +329,16 @@ export default function HaruFairyApp() {
   }
 
   async function signInWithKakao() {
+    const redirectTo = window.location.origin;
+
     await supabase.auth.signInWithOAuth({
       provider: "kakao",
       options: {
-        redirectTo: window.location.origin,
+        redirectTo,
         scopes: "profile_nickname profile_image",
+        queryParams: {
+          scope: "profile_nickname profile_image",
+        },
       },
     });
   }
