@@ -1,6 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import type { Session } from "@supabase/supabase-js";
+import {
+  createChatSummary,
+  createMemo,
+  createSchedule,
+  createTodo,
+  loadAppData,
+  updateTodoCompleted,
+  type AppMemo,
+  type AppProfile,
+  type AppSchedule,
+  type AppTodo,
+} from "@/lib/haru-store";
+import { supabase } from "@/lib/supabase/client";
 
 type Tab = "home" | "calendar" | "chat" | "records" | "my";
 type RecordMode = "memo" | "todo";
@@ -16,32 +31,32 @@ type ModalType =
   | "saved"
   | "cancel";
 
-type Todo = {
-  id: number;
-  text: string;
-  done: boolean;
-};
-
-type Schedule = {
-  id: number;
-  title: string;
-  date: string;
-  time: string;
-  color: string;
-};
-
-type Memo = {
-  id: number;
-  date: string;
-  title: string;
-  body: string;
-};
+type Todo = AppTodo;
+type Schedule = AppSchedule;
+type Memo = AppMemo;
 
 type Message = {
   id: number;
   from: "user" | "ai";
   text: string;
 };
+type ScheduleFormPayload = {
+  title: string;
+  date: string;
+  color: string;
+};
+type EditorSavePayload =
+  | {
+      kind: "memo";
+      date: string;
+      title: string;
+      body: string;
+    }
+  | {
+      kind: "todo";
+      date: string;
+      todos: string[];
+    };
 type IconName =
   | "home"
   | "calendar"
@@ -68,52 +83,6 @@ const today = {
 const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
 const monthDays = [31, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 1, 2, 3, 4];
 
-const initialTodos: Todo[] = [
-  { id: 1, text: "운동복 챙겨가기", done: true },
-  { id: 2, text: "보고서 초안 작성", done: false },
-  { id: 3, text: "치과 예약 확인", done: false },
-  { id: 4, text: "하루 마무리 기록하기", done: false },
-];
-
-const initialSchedules: Schedule[] = [
-  {
-    id: 1,
-    title: "스터디 줌 미팅",
-    date: today.dateKey,
-    time: "오늘 21:00",
-    color: "#AFA0FF",
-  },
-  {
-    id: 2,
-    title: "치과 예약",
-    date: today.dateKey,
-    time: "내일 15:00",
-    color: "#FFD195",
-  },
-  {
-    id: 3,
-    title: "스터디 모임",
-    date: "2026-06-29",
-    time: "19:00",
-    color: "#AFA0FF",
-  },
-];
-
-const initialMemos: Memo[] = [
-  {
-    id: 1,
-    date: "2026.06.30",
-    title: "바쁘지만 알차던 하루",
-    body: "오전에는 면접 준비로 정신이 없었지만, 오후에는 스터디 준비를 마치고 마음이 조금 놓였다. 내일은 치과 예약을 먼저 확인하고 보고서 초안을 끝내야겠다.",
-  },
-  {
-    id: 2,
-    date: "2026.06.29",
-    title: "작은 루틴을 지킨 날",
-    body: "오늘은 운동복을 미리 챙겨두고 해야 할 일을 짧게 정리했다. 오래 쓰지는 못했지만 짧게라도 기록하니 하루가 덜 흘러간 느낌이었다.",
-  },
-];
-
 const initialMessages: Message[] = [
   {
     id: 1,
@@ -139,11 +108,12 @@ const summaryMemo = {
 
 const summaryTodos = ["보고서 초안 작성", "치과 예약 확인", "운동복 챙기기"];
 const summarySchedule: Schedule = {
-  id: 99,
+  id: "summary-schedule",
   title: "치과 예약",
   date: today.dateKey,
   time: "내일 15:00",
   color: "#FFD195",
+  isAllDay: false,
 };
 
 const navItems: Array<{ tab: Tab; label: string; icon: IconName }> = [
@@ -159,38 +129,115 @@ export default function HaruFairyApp() {
   const [recordMode, setRecordMode] = useState<RecordMode>("memo");
   const [chatDone, setChatDone] = useState(false);
   const [modal, setModal] = useState<ModalType | null>(null);
-  const [todos, setTodos] = useState<Todo[]>(initialTodos);
-  const [schedules, setSchedules] = useState<Schedule[]>(initialSchedules);
-  const [memos, setMemos] = useState<Memo[]>(initialMemos);
+  const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<AppProfile | null>(null);
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [memos, setMemos] = useState<Memo[]>([]);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [messageDraft, setMessageDraft] = useState("");
   const [selectedDate, setSelectedDate] = useState(29);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [appError, setAppError] = useState<string | null>(null);
 
-  const completedCount = todos.filter((todo) => todo.done).length;
+  const todaysTodos = todos.filter((todo) => todo.date === today.dateKey);
+  const todaysSchedules = schedules.filter(
+    (schedule) => schedule.date === today.dateKey,
+  );
+  const completedCount = todaysTodos.filter((todo) => todo.done).length;
+  const totalCompletedCount = todos.filter((todo) => todo.done).length;
   const selectedDateKey = `2026-06-${String(selectedDate).padStart(2, "0")}`;
   const selectedSchedules = schedules.filter(
     (schedule) => schedule.date === selectedDateKey,
   );
   const selectedWeekday = getJune2026Weekday(selectedDate);
 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      void applySession(data.session);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      void applySession(session);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  async function applySession(nextSession: Session | null) {
+    setSession(nextSession);
+    setIsLoggedIn(Boolean(nextSession));
+    setAppError(null);
+
+    if (!nextSession) {
+      setProfile(null);
+      setMemos([]);
+      setTodos([]);
+      setSchedules([]);
+      setIsLoadingData(false);
+      return;
+    }
+
+    setIsLoadingData(true);
+
+    try {
+      const data = await loadAppData(nextSession.user.id);
+      setProfile(data.profile);
+      setMemos(data.memos);
+      setTodos(data.todos);
+      setSchedules(data.schedules);
+    } catch (error) {
+      setAppError(getErrorMessage(error));
+    } finally {
+      setIsLoadingData(false);
+    }
+  }
+
   const calendarCells = useMemo(() => {
+    const scheduledDays = new Set(
+      schedules
+        .map((schedule) => Number(schedule.date.split("-")[2]))
+        .filter((day) => Number.isFinite(day)),
+    );
+
     return monthDays.map((day, index) => ({
       id: `${day}-${index}`,
       day,
       muted: index === 0 || index > 30,
       today: day === today.day && index === 30,
       selected: day === selectedDate && !((day === today.day && index !== 30) || index === 0),
-      hasSchedule: [14, 21, 29, 30].includes(day),
+      hasSchedule: scheduledDays.has(day),
     }));
-  }, [selectedDate]);
+  }, [schedules, selectedDate]);
 
-  function toggleTodo(id: number) {
+  async function toggleTodo(id: string) {
+    const target = todos.find((todo) => todo.id === id);
+    if (!target) {
+      return;
+    }
+
+    const nextDone = !target.done;
     setTodos((current) =>
       current.map((todo) =>
-        todo.id === id ? { ...todo, done: !todo.done } : todo,
+        todo.id === id ? { ...todo, done: nextDone } : todo,
       ),
     );
+
+    try {
+      await updateTodoCompleted({ id, completed: nextDone });
+    } catch (error) {
+      setTodos((current) =>
+        current.map((todo) =>
+          todo.id === id ? { ...todo, done: target.done } : todo,
+        ),
+      );
+      setAppError(getErrorMessage(error));
+    }
   }
 
   function sendMessage() {
@@ -211,34 +258,89 @@ export default function HaruFairyApp() {
     setMessageDraft("");
   }
 
-  function saveSummary() {
-    const baseId = Date.now();
-    setMemos((current) => [
-      {
-        id: baseId,
-        date: "2026.06.30",
-        title: summaryMemo.title,
-        body: summaryMemo.body,
-      },
-      ...current,
-    ]);
-    setTodos((current) => [
-      ...summaryTodos.map((text, index) => ({
-        id: baseId + index + 1,
-        text,
-        done: false,
-      })),
-      ...current,
-    ]);
-    setSchedules((current) => [
-      { ...summarySchedule, id: baseId + 10 },
-      ...current,
-    ]);
-    setModal("saved");
+  async function saveSummary() {
+    const userId = requireUserId();
+    if (!userId) {
+      return;
+    }
+
+    try {
+      const [memo, createdTodos, schedule] = await Promise.all([
+        createMemo({
+          userId,
+          date: today.dateKey,
+          title: summaryMemo.title,
+          body: summaryMemo.body,
+          source: "ai",
+        }),
+        Promise.all(
+          summaryTodos.map((text) =>
+            createTodo({
+              userId,
+              date: today.dateKey,
+              text,
+              source: "ai",
+            }),
+          ),
+        ),
+        createSchedule({
+          userId,
+          date: today.dateKey,
+          title: summarySchedule.title,
+          startTime: "15:00",
+          endTime: "16:00",
+          isAllDay: false,
+          color: summarySchedule.color,
+          source: "ai",
+        }),
+      ]);
+
+      await createChatSummary({
+        userId,
+        conversation: messages,
+        memoTitle: summaryMemo.title,
+        memoBody: summaryMemo.body,
+        todos: summaryTodos,
+        scheduleSuggestions: [summarySchedule],
+      });
+
+      setMemos((current) => [memo, ...current]);
+      setTodos((current) => [...createdTodos, ...current]);
+      setSchedules((current) => [schedule, ...current]);
+      setModal("saved");
+    } catch (error) {
+      setAppError(getErrorMessage(error));
+    }
   }
 
   function closeModal() {
     setModal(null);
+  }
+
+  function requireUserId() {
+    if (!session) {
+      setActiveTab("my");
+      setModal(null);
+      setAppError("로그인 후 이용할 수 있어요.");
+      return null;
+    }
+
+    return session.user.id;
+  }
+
+  async function signInWithKakao() {
+    await supabase.auth.signInWithOAuth({
+      provider: "kakao",
+      options: {
+        redirectTo: window.location.origin,
+        scopes: "profile_nickname profile_image",
+      },
+    });
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    setIsLoggedIn(false);
   }
 
   return (
@@ -247,8 +349,11 @@ export default function HaruFairyApp() {
         <div className="screen-scroll">
           {activeTab === "home" && (
             <HomeScreen
-              todos={todos}
-              schedules={schedules}
+              userName={profile?.nickname ?? "지원"}
+              isLoading={isLoadingData}
+              error={appError}
+              todos={todaysTodos}
+              schedules={todaysSchedules}
               completedCount={completedCount}
               calendarCells={calendarCells}
               onChat={() => setActiveTab("chat")}
@@ -294,7 +399,7 @@ export default function HaruFairyApp() {
               mode={recordMode}
               memos={memos}
               todos={todos}
-              completedCount={completedCount}
+              completedCount={totalCompletedCount}
               onMode={setRecordMode}
               onToggleTodo={toggleTodo}
               onMemoWrite={() => setModal("manualMemo")}
@@ -307,8 +412,8 @@ export default function HaruFairyApp() {
             <MyScreen
               isLoggedIn={isLoggedIn}
               onSignup={() => setModal("signup")}
-              onLogin={() => setIsLoggedIn(true)}
-              onLogout={() => setIsLoggedIn(false)}
+              onLogin={signInWithKakao}
+              onLogout={signOut}
             />
           )}
         </div>
@@ -320,18 +425,25 @@ export default function HaruFairyApp() {
           title="새 일정"
           submitLabel="일정 추가"
           onClose={() => setModal("cancel")}
-          onSubmit={() => {
-            setSchedules((current) => [
-              {
-                id: Date.now(),
-                title: "스터디 준비",
-                date: today.dateKey,
-                time: "종일",
-                color: "#AFA0FF",
-              },
-              ...current,
-            ]);
-            closeModal();
+          onSubmit={async (payload) => {
+            const userId = requireUserId();
+            if (!userId) {
+              return;
+            }
+
+            try {
+              const schedule = await createSchedule({
+                userId,
+                date: payload.date,
+                title: payload.title,
+                isAllDay: true,
+                color: payload.color,
+              });
+              setSchedules((current) => [schedule, ...current]);
+              closeModal();
+            } catch (error) {
+              setAppError(getErrorMessage(error));
+            }
           }}
         />
       )}
@@ -342,7 +454,7 @@ export default function HaruFairyApp() {
           submitLabel="저장"
           compact
           onClose={() => setModal("cancel")}
-          onSubmit={closeModal}
+          onSubmit={async () => closeModal()}
         />
       )}
 
@@ -351,7 +463,7 @@ export default function HaruFairyApp() {
           kind="memo"
           title="메모"
           onClose={() => setModal("cancel")}
-          onSave={closeModal}
+          onSave={async () => closeModal()}
         />
       )}
 
@@ -360,7 +472,7 @@ export default function HaruFairyApp() {
           kind="todo"
           title="할 일"
           onClose={() => setModal("cancel")}
-          onSave={closeModal}
+          onSave={async () => closeModal()}
         />
       )}
 
@@ -370,17 +482,24 @@ export default function HaruFairyApp() {
           title="메모 작성"
           manual
           onClose={() => setModal("cancel")}
-          onSave={() => {
-            setMemos((current) => [
-              {
-                id: Date.now(),
-                date: "2026.06.30",
-                title: "오늘의 짧은 기록",
-                body: "직접 남긴 메모가 여기에 저장돼요.",
-              },
-              ...current,
-            ]);
-            closeModal();
+          onSave={async (payload) => {
+            const userId = requireUserId();
+            if (!userId || payload.kind !== "memo") {
+              return;
+            }
+
+            try {
+              const memo = await createMemo({
+                userId,
+                date: payload.date,
+                title: payload.title,
+                body: payload.body,
+              });
+              setMemos((current) => [memo, ...current]);
+              closeModal();
+            } catch (error) {
+              setAppError(getErrorMessage(error));
+            }
           }}
         />
       )}
@@ -391,12 +510,27 @@ export default function HaruFairyApp() {
           title="할 일 작성"
           manual
           onClose={() => setModal("cancel")}
-          onSave={() => {
-            setTodos((current) => [
-              ...current,
-              { id: Date.now(), text: "직접 추가한 할 일", done: false },
-            ]);
-            closeModal();
+          onSave={async (payload) => {
+            const userId = requireUserId();
+            if (!userId || payload.kind !== "todo") {
+              return;
+            }
+
+            try {
+              const createdTodos = await Promise.all(
+                payload.todos.map((text) =>
+                  createTodo({
+                    userId,
+                    date: payload.date,
+                    text,
+                  }),
+                ),
+              );
+              setTodos((current) => [...current, ...createdTodos]);
+              closeModal();
+            } catch (error) {
+              setAppError(getErrorMessage(error));
+            }
           }}
         />
       )}
@@ -447,6 +581,9 @@ export default function HaruFairyApp() {
 }
 
 function HomeScreen({
+  userName,
+  isLoading,
+  error,
   todos,
   schedules,
   completedCount,
@@ -457,6 +594,9 @@ function HomeScreen({
   onToggleTodo,
   onAddTodo,
 }: {
+  userName: string;
+  isLoading: boolean;
+  error: string | null;
   todos: Todo[];
   schedules: Schedule[];
   completedCount: number;
@@ -471,21 +611,24 @@ function HomeScreen({
   onChat: () => void;
   onCalendar: () => void;
   onTodos: () => void;
-  onToggleTodo: (id: number) => void;
+  onToggleTodo: (id: string) => void;
   onAddTodo: () => void;
 }) {
   return (
     <div className="space-y-6">
       <header className="home-header">
         <div>
-          <h1>안녕하세요, 지원님</h1>
+          <h1>안녕하세요, {userName}님</h1>
           <p>{today.dateLabel}</p>
         </div>
         <span className="streak-badge">🔥 5일째</span>
       </header>
 
+      {isLoading && <p className="status-copy">기록을 불러오는 중이에요...</p>}
+      {error && <p className="status-copy error">{error}</p>}
+
       <button className="ai-entry-card" onClick={onChat}>
-        <span className="fairy-thumb"><FairyIcon /></span>
+        <span className="fairy-thumb"><LogoMark /></span>
         <span className="ai-entry-copy">
           <strong>기록하고 싶은 내용이 있나요?</strong>
           <small>AI요정 하루가 정리해드릴게요</small>
@@ -684,7 +827,7 @@ function ChatScreen({
       <section className="message-list">
         {messages.map((message) => (
           <div key={message.id} className={`message-row ${message.from}`}>
-            {message.from === "ai" && <span className="ai-avatar"><FairyIcon compact /></span>}
+            {message.from === "ai" && <span className="ai-avatar"><LogoMark compact /></span>}
             <p>{message.text}</p>
           </div>
         ))}
@@ -729,7 +872,7 @@ function RecordsScreen({
   todos: Todo[];
   completedCount: number;
   onMode: (mode: RecordMode) => void;
-  onToggleTodo: (id: number) => void;
+  onToggleTodo: (id: string) => void;
   onMemoWrite: () => void;
   onTodoWrite: () => void;
   onMemoDetail: () => void;
@@ -808,7 +951,7 @@ function MyScreen({
 
       {isLoggedIn ? (
         <section className="my-card">
-          <div className="profile-orb fairy"><FairyIcon compact /></div>
+          <div className="profile-orb fairy"><LogoMark compact /></div>
           <h2>지원님 안녕하세요.</h2>
           <p>오늘도 하루 요정과 함께해요.</p>
           <a
@@ -902,7 +1045,7 @@ function TodoList({
   onToggle,
 }: {
   todos: Todo[];
-  onToggle: (id: number) => void;
+  onToggle: (id: string) => void;
 }) {
   if (todos.length === 0) {
     return <EmptyState text="등록된 일정이 없습니다" />;
@@ -974,46 +1117,79 @@ function ScheduleModal({
   submitLabel: string;
   compact?: boolean;
   onClose: () => void;
-  onSubmit: () => void;
+  onSubmit: (payload: ScheduleFormPayload) => Promise<void>;
 }) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const titleValue = String(formData.get("title") ?? "").trim();
+    const colorValue = String(formData.get("color") ?? "#AFA0FF");
+
+    if (!titleValue) {
+      return;
+    }
+
+    void onSubmit({
+      title: titleValue,
+      date: today.dateKey,
+      color: colorValue,
+    });
+  }
+
   return (
     <ModalShell>
-      <div className="modal-header">
-        <h2>{title}</h2>
-        <button onClick={onClose} aria-label="닫기"><Icon name="close" /></button>
-      </div>
-      <label className="field-label">제목*</label>
-      <input className="field-input" defaultValue={compact ? "치과 예약" : ""} placeholder="일정 제목" maxLength={30} />
-      <div className="date-field-grid">
-        <FieldBox label="시작일(화)" value="2026.06.30" />
-        <FieldBox label="종료일(화)" value="2026.06.30" />
-      </div>
-      {!compact && (
-        <>
-          <p className="field-label">반복 요일*</p>
-          <div className="weekday-pills">
-            {weekdays.map((day) => (
-              <button key={day} className={day === "화" ? "active" : ""}>{day}</button>
-            ))}
-          </div>
-        </>
-      )}
-      <div className="toggle-row">
-        <div>
-          <strong>시간 설정*</strong>
-          <small>하루 종일 일정으로 등록돼요.</small>
+      <form onSubmit={handleSubmit}>
+        <div className="modal-header">
+          <h2>{title}</h2>
+          <button type="button" onClick={onClose} aria-label="닫기"><Icon name="close" /></button>
         </div>
-        <span><i /></span>
-      </div>
-      <p className="field-label">색상*</p>
-      <div className="color-dots">
-        {["#AFA0FF", "#FFD195", "#9EE6CF", "#FF9EB5"].map((color) => (
-          <button key={color} style={{ backgroundColor: color }} />
-        ))}
-      </div>
-      <button className="primary-action full" onClick={onSubmit}>
-        {submitLabel}
-      </button>
+        <label className="field-label">제목*</label>
+        <input
+          className="field-input"
+          name="title"
+          defaultValue={compact ? "치과 예약" : ""}
+          placeholder="일정 제목"
+          maxLength={30}
+          required
+        />
+        <div className="date-field-grid">
+          <FieldBox label="시작일(화)" value={today.dateKey} />
+          <FieldBox label="종료일(화)" value={today.dateKey} />
+        </div>
+        {!compact && (
+          <>
+            <p className="field-label">반복 요일*</p>
+            <div className="weekday-pills">
+              {weekdays.map((day) => (
+                <button type="button" key={day} className={day === "화" ? "active" : ""}>{day}</button>
+              ))}
+            </div>
+          </>
+        )}
+        <div className="toggle-row">
+          <div>
+            <strong>시간 설정*</strong>
+            <small>하루 종일 일정으로 등록돼요.</small>
+          </div>
+          <span><i /></span>
+        </div>
+        <p className="field-label">색상*</p>
+        <div className="color-dots">
+          {["#AFA0FF", "#FFD195", "#9EE6CF", "#FF9EB5"].map((color, index) => (
+            <label key={color} style={{ backgroundColor: color }}>
+              <input
+                type="radio"
+                name="color"
+                value={color}
+                defaultChecked={index === 0}
+              />
+            </label>
+          ))}
+        </div>
+        <button className="primary-action full" type="submit">
+          {submitLabel}
+        </button>
+      </form>
     </ModalShell>
   );
 }
@@ -1029,33 +1205,82 @@ function EditorModal({
   title: string;
   manual?: boolean;
   onClose: () => void;
-  onSave: () => void;
+  onSave: (payload: EditorSavePayload) => Promise<void>;
 }) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+
+    if (kind === "memo") {
+      const titleValue = String(formData.get("title") ?? "").trim();
+      const bodyValue = String(formData.get("body") ?? "").trim();
+
+      if (!bodyValue) {
+        return;
+      }
+
+      void onSave({
+        kind: "memo",
+        date: today.dateKey,
+        title: titleValue || bodyValue.slice(0, 10),
+        body: bodyValue,
+      });
+      return;
+    }
+
+    const todos = formData
+      .getAll("todo")
+      .map((value) => String(value).trim())
+      .filter(Boolean);
+
+    if (todos.length === 0) {
+      return;
+    }
+
+    void onSave({
+      kind: "todo",
+      date: today.dateKey,
+      todos,
+    });
+  }
+
   return (
     <ModalShell>
-      <div className="edit-topbar">
-        <button onClick={onClose}>취소</button>
-        <strong>{title}</strong>
-        <button onClick={onSave}>저장</button>
-      </div>
-      <button className="date-chip">2026.06.30 화요일</button>
-      {kind === "memo" ? (
-        <div className="editor-body">
-          <input defaultValue={manual ? "" : summaryMemo.title} placeholder="제목" />
-          <textarea defaultValue={manual ? "" : summaryMemo.body} placeholder="내용을 입력하세요." rows={8} />
+      <form onSubmit={handleSubmit}>
+        <div className="edit-topbar">
+          <button type="button" onClick={onClose}>취소</button>
+          <strong>{title}</strong>
+          <button type="submit">저장</button>
         </div>
-      ) : (
-        <div className="todo-editor">
-          {(manual ? [""] : summaryTodos).map((todo, index) => (
-            <div key={`${todo}-${index}`}>
-              <span />
-              <input defaultValue={todo} placeholder="할 일을 입력하세요." />
-              <button aria-label="할 일 삭제"><Icon name="trash" /></button>
-            </div>
-          ))}
-          <button className="ghost-add-button">+ 할 일 추가</button>
-        </div>
-      )}
+        <button type="button" className="date-chip">{today.dateLabel}</button>
+        {kind === "memo" ? (
+          <div className="editor-body">
+            <input
+              name="title"
+              defaultValue={manual ? "" : summaryMemo.title}
+              placeholder="제목"
+            />
+            <textarea
+              name="body"
+              defaultValue={manual ? "" : summaryMemo.body}
+              placeholder="내용을 입력하세요."
+              rows={8}
+              required
+            />
+          </div>
+        ) : (
+          <div className="todo-editor">
+            {(manual ? [""] : summaryTodos).map((todo, index) => (
+              <div key={`${todo}-${index}`}>
+                <span />
+                <input name="todo" defaultValue={todo} placeholder="할 일을 입력하세요." />
+                <button type="button" aria-label="할 일 삭제"><Icon name="trash" /></button>
+              </div>
+            ))}
+            <button type="button" className="ghost-add-button">+ 할 일 추가</button>
+          </div>
+        )}
+      </form>
     </ModalShell>
   );
 }
@@ -1077,7 +1302,7 @@ function SignupModal({
         <span />
       </div>
       <div className="signup-hero">
-        <div><FairyIcon /></div>
+        <div><LogoMark /></div>
         <h2>하루 요정 시작하기</h2>
         <p>닉네임과 비밀번호로 계정을 만들어요</p>
       </div>
@@ -1200,51 +1425,29 @@ function groupMemosByDate(memos: Memo[]) {
 }
 
 function formatKoreanDate(date: string) {
-  const [, month, day] = date.split(".");
+  const separator = date.includes(".") ? "." : "-";
+  const [, month, day] = date.split(separator);
   return `2026년 ${Number(month)}월 ${Number(day)}일`;
 }
 
-function FairyIcon({ compact = false }: { compact?: boolean }) {
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "일시적인 오류가 발생했어요. 다시 시도해주세요.";
+}
+
+function LogoMark({ compact = false }: { compact?: boolean }) {
   return (
-    <svg
-      className={compact ? "fairy-icon compact" : "fairy-icon"}
-      viewBox="0 0 80 80"
-      aria-hidden="true"
-    >
-      <defs>
-        <radialGradient id="fairyGlow" cx="50%" cy="48%" r="55%">
-          <stop offset="0%" stopColor="#FFF7D8" />
-          <stop offset="46%" stopColor="#BFB5FF" />
-          <stop offset="100%" stopColor="#7E68FF" />
-        </radialGradient>
-        <linearGradient id="fairyWing" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0%" stopColor="#FFF7FF" />
-          <stop offset="45%" stopColor="#B8A8FF" />
-          <stop offset="100%" stopColor="#6E5EFF" />
-        </linearGradient>
-      </defs>
-      <path
-        d="M38 39C26 15 11 12 10 28c-.8 13 13 17 25 15C23 50 17 62 28 66c12 4 16-13 14-24 7 11 20 22 27 12 8-12-9-19-24-18 13-7 20-20 10-26-10-7-17 11-17 29Z"
-        fill="url(#fairyWing)"
-        opacity="0.96"
-      />
-      <path
-        d="M37 38c-8-13-17-17-21-10-4 8 8 12 19 12-11 3-16 12-9 16 8 4 12-7 12-16 4 8 14 17 19 10 5-8-7-12-17-11 9-5 13-15 6-18-7-3-10 8-9 17Z"
-        fill="url(#fairyGlow)"
-        opacity="0.9"
-      />
-      <circle cx="41" cy="40" r="5" fill="#FFFBEA" />
-      <path
-        d="M23 53c-6 4-10 8-13 14M56 25c6-6 10-9 16-12M55 55l10 10"
-        stroke="#FFF1B3"
-        strokeLinecap="round"
-        strokeWidth="3"
-        opacity="0.8"
-      />
-      <circle cx="18" cy="57" r="2.2" fill="#FFF1B3" />
-      <circle cx="61" cy="20" r="2" fill="#FFF1B3" />
-      <circle cx="66" cy="62" r="1.8" fill="#FFF1B3" />
-    </svg>
+    <Image
+      className={compact ? "logo-mark compact" : "logo-mark"}
+      src="/logo.png"
+      alt="하루 요정 로고"
+      width={compact ? 34 : 54}
+      height={compact ? 34 : 54}
+      priority={!compact}
+    />
   );
 }
 

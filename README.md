@@ -6,6 +6,8 @@ AI와 대화하면 오늘의 짧은 메모, 내일 할 일, 일정 후보를 자
 
 - [기능명세서 VER 0.1](./docs/functional-spec-v0.1.md)
 - [피그마 PNG 화면 시안](./figma-references/README.md)
+- [Supabase 소셜 로그인 설정](./docs/supabase-social-login.md)
+- [Supabase SQL 스키마](./supabase/schema.sql)
 
 ## 구현 방향 메모
 

@@ -83,16 +83,19 @@ textarea {
   height: 1em;
 }
 
-.fairy-icon {
+.logo-mark {
   display: block;
   width: 54px;
   height: 54px;
+  border-radius: 14px;
+  object-fit: cover;
   filter: drop-shadow(0 0 12px rgba(175, 166, 255, 0.68));
 }
 
-.fairy-icon.compact {
+.logo-mark.compact {
   width: 34px;
   height: 34px;
+  border-radius: 10px;
 }
 
 .screen-scroll {
@@ -147,6 +150,22 @@ textarea {
   font-size: 14px;
   font-weight: 900;
   white-space: nowrap;
+}
+
+.status-copy {
+  margin: 0;
+  border: 1px solid rgba(180, 166, 255, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #dcd7ff;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.status-copy.error {
+  border-color: rgba(255, 158, 181, 0.28);
+  color: var(--danger);
 }
 
 .ai-entry-card,
@@ -1233,11 +1252,17 @@ button.calendar-cell {
   margin-bottom: 22px;
 }
 
-.color-dots button {
+.color-dots label {
+  display: block;
   width: 34px;
   height: 34px;
   border: 3px solid rgba(255, 255, 255, 0.22);
   border-radius: 50%;
+  cursor: pointer;
+}
+
+.color-dots input {
+  opacity: 0;
 }
 
 .date-chip {
@@ -1307,7 +1332,7 @@ button.calendar-cell {
   font-weight: 950;
 }
 
-.signup-hero div .fairy-icon {
+.signup-hero div .logo-mark {
   width: 62px;
   height: 62px;
 }
