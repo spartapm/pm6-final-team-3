@@ -425,9 +425,9 @@ export default function HaruFairyApp() {
       provider: "kakao",
       options: {
         redirectTo,
-        scopes: "profile_nickname profile_image",
+        scopes: "profile_nickname",
         queryParams: {
-          scope: "profile_nickname profile_image",
+          scope: "profile_nickname",
         },
       },
     });

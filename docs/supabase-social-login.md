@@ -44,7 +44,7 @@ This MVP intentionally does not use environment variables for Supabase client co
   - `https://qwihfnppdhhglxdfajem.supabase.co/auth/v1/callback`
 - Copy REST API Key / Client Secret values into Supabase Kakao provider settings.
 - Configure consent items needed for the MVP, such as profile nickname.
-- The app requests only `profile_nickname profile_image` scopes. It does not request `account_email`.
+- The app requests only the `profile_nickname` scope. It does not request `profile_image` or `account_email`.
 
 ## What To Ask The Planner / Owner For Kakao Login
 
@@ -58,7 +58,7 @@ Ask for access to the Kakao Developers app or ask them to send:
   - `https://qwihfnppdhhglxdfajem.supabase.co/auth/v1/callback`
 - Consent items enabled for login:
   - Profile nickname
-  - Profile image, optional
+  - Profile image is not requested by the app
   - Kakao account email is not required for the current MVP
 - Production service domain registration:
   - `https://pm6-final-team-3.vercel.app`
