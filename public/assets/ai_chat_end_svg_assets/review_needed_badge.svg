@@ -1,0 +1,7 @@
+<svg width="118" height="34" viewBox="0 0 118 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+ <rect width="118" height="34" rx="17" fill="#7466B6" fill-opacity=".75"/>
+ <g transform="translate(18 9)" stroke="#D8D0FF" stroke-width="2" stroke-linecap="round">
+  <path d="M8 1.5V4" opacity="1"/><path d="M8 12V14.5" opacity=".45"/><path d="M1.5 8H4" opacity=".6"/><path d="M12 8H14.5" opacity=".9"/><path d="M3.4 3.4L5.1 5.1" opacity=".75"/><path d="M10.9 10.9L12.6 12.6" opacity=".35"/><path d="M12.6 3.4L10.9 5.1" opacity=".85"/><path d="M5.1 10.9L3.4 12.6" opacity=".5"/>
+ </g>
+ <text x="44" y="22" font-family="Arial, sans-serif" font-size="15" font-weight="700" fill="#D8D0FF">검토 필요</text>
+</svg>

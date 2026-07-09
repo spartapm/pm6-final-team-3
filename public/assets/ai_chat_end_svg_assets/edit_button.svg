@@ -1,0 +1,6 @@
+<svg width="86" height="46" viewBox="0 0 86 46" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="1" y="1" width="84" height="44" rx="6" fill="#5D55A8"/>
+  <path d="M24 29H20V25L31.3 13.7C32.1 12.9 33.3 12.9 34.1 13.7L35.3 14.9C36.1 15.7 36.1 16.9 35.3 17.7L24 29Z" stroke="#B7A8FF" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M29.8 15.2L33.8 19.2" stroke="#B7A8FF" stroke-width="2" stroke-linecap="round"/>
+  <text x="46" y="29" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#B7A8FF">수정</text>
+</svg>

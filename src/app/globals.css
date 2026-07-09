@@ -123,6 +123,23 @@ button {
   height: 1em;
 }
 
+.ui-icon-mask {
+  background-color: currentColor;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+}
+
+.ui-icon-asset {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  object-fit: contain;
+}
+
 .logo-mark {
   display: block;
   width: 54px;
@@ -384,13 +401,11 @@ button.calendar-cell {
   outline-offset: -2px;
 }
 
-.calendar-cell i {
+.calendar-cell .calendar-dot-asset {
   position: absolute;
   bottom: -3px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: #ffd195;
+  width: 8px;
+  height: 8px;
 }
 
 .today-schedule {
@@ -421,11 +436,14 @@ button.calendar-cell {
   display: flex;
   gap: 10px;
   margin: 14px 0;
+  align-items: stretch;
 }
 
-.schedule-line > span {
-  width: 3px;
-  border-radius: 999px;
+.schedule-bar-asset {
+  width: 6px;
+  height: auto;
+  flex: 0 0 6px;
+  object-fit: cover;
 }
 
 .schedule-line strong,
@@ -498,22 +516,8 @@ button.calendar-cell {
   text-align: left;
 }
 
-.todo-row span {
-  display: grid;
-  width: 31px;
-  height: 31px;
+.todo-row .ui-icon-asset {
   flex: 0 0 auto;
-  place-items: center;
-  border: 2px solid rgba(255, 255, 255, 0.21);
-  border-radius: 8px;
-  color: #1e2433;
-  font-size: 18px;
-  font-weight: var(--weight-title);
-}
-
-.todo-row span.checked {
-  border-color: var(--mint);
-  background: var(--mint);
 }
 
 .todo-row em {
@@ -573,7 +577,7 @@ button.calendar-cell {
 
 .nav-arrow.prev .ui-icon,
 .back-button .ui-icon {
-  transform: rotate(180deg);
+  transform: none;
 }
 
 .month-card {
@@ -604,7 +608,7 @@ button.calendar-cell {
 .schedule-card {
   display: grid;
   width: 100%;
-  grid-template-columns: 5px 62px 1fr;
+  grid-template-columns: 10px 62px 1fr;
   align-items: center;
   overflow: hidden;
   border: var(--card-border);
@@ -615,9 +619,11 @@ button.calendar-cell {
   box-shadow: var(--card-shadow);
 }
 
-.schedule-card > span {
-  height: 100%;
+.schedule-card .schedule-bar-asset {
+  width: 6px;
   min-height: 64px;
+  height: 100%;
+  object-fit: cover;
 }
 
 .schedule-card strong {
@@ -796,13 +802,32 @@ button.calendar-cell {
   letter-spacing: var(--track-tight);
 }
 
-.result-card button {
-  border-radius: 999px;
+.result-header-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.result-header-title .ui-icon-asset {
+  width: 28px;
+  height: 28px;
+}
+
+.result-card button,
+.edit-icon-button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.08);
   color: #cfc8ff;
-  padding: 8px 11px;
-  font-size: var(--font-micro);
-  font-weight: var(--weight-label);
+  padding: 0;
+}
+
+.edit-icon-button .ui-icon-asset {
+  width: 20px;
+  height: 20px;
 }
 
 .result-card p {
@@ -830,11 +855,8 @@ button.calendar-cell {
   font-weight: var(--weight-body);
 }
 
-.readonly-todos span {
-  width: 22px;
-  height: 22px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 7px;
+.readonly-todos .ui-icon-asset {
+  flex: 0 0 auto;
 }
 
 .suggestion-card {
@@ -1257,9 +1279,9 @@ button.calendar-cell {
   padding: 0;
 }
 
-.modal-header button .ui-icon {
-  width: 18px;
-  height: 18px;
+.toggle-asset {
+  width: 72px;
+  height: auto;
 }
 
 .field-label {
@@ -1403,17 +1425,44 @@ button.calendar-cell {
   margin-bottom: 22px;
 }
 
-.color-dots label {
+.color-chip-label {
+  position: relative;
   display: block;
-  width: 34px;
-  height: 34px;
-  border: 3px solid rgba(255, 255, 255, 0.22);
-  border-radius: 50%;
+  width: 42px;
+  height: 42px;
   cursor: pointer;
 }
 
-.color-dots input {
+.color-chip-label input {
+  position: absolute;
   opacity: 0;
+  pointer-events: none;
+}
+
+.color-chip-asset {
+  width: 42px;
+  height: 42px;
+  border: 3px solid transparent;
+  border-radius: 50%;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.color-chip-label:has(input:checked) .color-chip-asset {
+  border-color: rgba(255, 255, 255, 0.88);
+  transform: scale(1.04);
+}
+
+.modal-header button {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  background: transparent;
+}
+
+.modal-header button .ui-icon,
+.modal-header button .ui-icon-asset {
+  width: 48px;
+  height: 48px;
 }
 
 .date-chip {

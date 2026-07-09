@@ -1,0 +1,33 @@
+<svg width="653" height="989" viewBox="0 0 653 989" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="653" height="989" fill="#100D22"/>
+  <rect x="27" y="11" width="600" height="974" rx="30" fill="#211B3D" stroke="#4B4078" stroke-width="2"/>
+  <circle cx="581" cy="59" r="24" fill="#3A315B"/><path d="M574 52L588 66M588 52L574 66" stroke="#F4F1FF" stroke-width="3" stroke-linecap="round"/>
+  <text x="58" y="70" fill="#F7F4FF" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="28" font-weight="800">새 일정</text>
+  <text x="58" y="125" fill="#F7F4FF" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" font-weight="800">제목</text>
+  <rect x="59" y="146" width="536" height="74" rx="18" fill="#17132E" stroke="#3C3463" stroke-width="1.5"/>
+  <text x="80" y="194" fill="#B9B4CC" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24">일정 제목</text>
+  <text x="58" y="263" fill="#F7F4FF" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" font-weight="800">시작 (화)</text>
+  <rect x="59" y="284" width="536" height="74" rx="18" fill="#17132E" stroke="#3C3463" stroke-width="1.5"/>
+  <text x="80" y="331" fill="#FFFFFF" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="26">2026. 6. 30.</text>
+  <text x="58" y="402" fill="#F7F4FF" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" font-weight="800">종료 (화)</text>
+  <rect x="59" y="423" width="536" height="74" rx="18" fill="#17132E" stroke="#3C3463" stroke-width="1.5"/>
+  <text x="80" y="469" fill="#FFFFFF" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="26">2026. 6. 30.</text>
+  <text x="58" y="532" fill="#F7F4FF" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" font-weight="800">반복 요일</text>
+  <g font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" font-weight="700" text-anchor="middle">
+    <rect x="59" y="561" width="68" height="66" rx="18" fill="#211B3D" stroke="#43396A" stroke-width="1.5"/><text x="93" y="602" fill="#FF6278">일</text>
+    <rect x="137" y="561" width="68" height="66" rx="18" fill="#211B3D" stroke="#43396A" stroke-width="1.5"/><text x="171" y="602" fill="#F4F1FF">월</text>
+    <rect x="215" y="561" width="68" height="66" rx="18" fill="#211B3D" stroke="#43396A" stroke-width="1.5"/><text x="249" y="602" fill="#F4F1FF">화</text>
+    <rect x="293" y="561" width="68" height="66" rx="18" fill="#211B3D" stroke="#43396A" stroke-width="1.5"/><text x="327" y="602" fill="#F4F1FF">수</text>
+    <rect x="371" y="561" width="68" height="66" rx="18" fill="#211B3D" stroke="#43396A" stroke-width="1.5"/><text x="405" y="602" fill="#F4F1FF">목</text>
+    <rect x="449" y="561" width="68" height="66" rx="18" fill="#211B3D" stroke="#43396A" stroke-width="1.5"/><text x="483" y="602" fill="#F4F1FF">금</text>
+    <rect x="527" y="561" width="68" height="66" rx="18" fill="#211B3D" stroke="#43396A" stroke-width="1.5"/><text x="561" y="602" fill="#6EA0FF">토</text>
+  </g>
+  <text x="58" y="684" fill="#F7F4FF" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" font-weight="800">시간 설정</text>
+  <text x="58" y="727" fill="#A7A0BD" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="20">하루 종일 일정으로 등록돼요.</text>
+  <rect x="506" y="653" width="90" height="48" rx="24" fill="#3A315B"/><circle cx="543" cy="677" r="18" fill="#FFFFFF"/>
+  <text x="58" y="779" fill="#F7F4FF" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" font-weight="800">색상</text>
+  <circle cx="84" cy="823" r="24" stroke="#F6F4FF" stroke-width="4"/><circle cx="84" cy="823" r="19" fill="#6372FF"/>
+  <circle cx="150" cy="823" r="25" fill="#EC5B76"/><circle cx="216" cy="823" r="25" fill="#37B98F"/><circle cx="282" cy="823" r="25" fill="#EDA640"/><circle cx="348" cy="823" r="25" fill="#A864D4"/><circle cx="416" cy="823" r="25" fill="#4CB7CA"/>
+  <rect x="58" y="875" width="538" height="80" rx="22" fill="#7065A9"/><text x="327" y="925" text-anchor="middle" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" font-weight="700" fill="#1C1732">추가</text>
+  <rect x="644" y="23" width="5" height="956" rx="2.5" fill="#D8D5E8" fill-opacity="0.7"/>
+</svg>

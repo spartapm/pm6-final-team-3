@@ -16,6 +16,14 @@ import {
   type AppSchedule,
   type AppTodo,
 } from "@/lib/haru-store";
+import {
+  CalendarDot,
+  ColorChip,
+  Icon,
+  ScheduleBar,
+  scheduleColorChips,
+  type IconName,
+} from "@/components/ui-icon";
 import { supabase } from "@/lib/supabase/client";
 
 type Tab = "home" | "calendar" | "chat" | "records" | "my";
@@ -71,21 +79,6 @@ type EditorSavePayload =
       date: string;
       todos: string[];
     };
-type IconName =
-  | "home"
-  | "calendar"
-  | "message"
-  | "record"
-  | "user"
-  | "send"
-  | "plus"
-  | "check"
-  | "close"
-  | "chevron"
-  | "trash"
-  | "kakao"
-  | "alert";
-
 const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
 const today = getTodayInfo();
 const monthDays = buildMonthDays(today.year, today.monthIndex);
@@ -786,11 +779,11 @@ function CalendarScreen({
     <div className="page-stack">
       <header className="page-header centered">
         <button className="nav-arrow prev" aria-label="이전 월">
-          <Icon name="chevron" />
+          <Icon name="chevron-left" />
         </button>
         <h1>{monthTitle}</h1>
         <button className="nav-arrow" aria-label="다음 월">
-          <Icon name="chevron" />
+          <Icon name="chevron-right" />
         </button>
       </header>
 
@@ -809,7 +802,7 @@ function CalendarScreen({
               onClick={() => onSelectDate(cell.day)}
             >
               <span>{cell.day}</span>
-              {cell.hasSchedule && <i />}
+              {cell.hasSchedule && <CalendarDot />}
             </button>
           ))}
         </div>
@@ -822,7 +815,7 @@ function CalendarScreen({
         {schedules.length > 0 ? (
           schedules.map((schedule) => (
             <button key={schedule.id} className="schedule-card" onClick={onEdit}>
-              <span style={{ backgroundColor: schedule.color }} />
+              <ScheduleBar color={schedule.color} />
               <strong>{schedule.time.replace("오늘 ", "")}</strong>
               <em>{schedule.title}</em>
             </button>
@@ -871,8 +864,11 @@ function ChatScreen({
   if (chatDone && summary) {
     return (
       <div className="page-stack">
-        <header className="page-header">
-          <h1>오늘의 기록이 완성됐어요</h1>
+        <header className="page-header result-header">
+          <div className="result-header-title">
+            <Icon name="sparkle" />
+            <h1>오늘의 기록이 완성됐어요</h1>
+          </div>
           <p>AI가 대화를 바탕으로 작성했어요. 확인하고 저장해주세요.</p>
         </header>
 
@@ -885,7 +881,7 @@ function ChatScreen({
             <ul className="readonly-todos">
               {summary.todos.map((todo) => (
                 <li key={todo}>
-                  <span />
+                  <Icon name="checkbox" size={22} />
                   {todo}
                 </li>
               ))}
@@ -1016,7 +1012,7 @@ function RecordsScreen({
                     <p>{memo.body}</p>
                   </button>
                   <button className="more-button" onClick={onMemoDetail} aria-label="메모 상세 보기">
-                    <Icon name="chevron" />
+                    <Icon name="chevron-right" />
                   </button>
                 </article>
               ))}
@@ -1143,7 +1139,7 @@ function CalendarGrid({
           ].join(" ")}
         >
           <span>{cell.day}</span>
-          {cell.hasSchedule && <i />}
+          {cell.hasSchedule && <CalendarDot />}
         </span>
       ))}
     </div>
@@ -1153,7 +1149,7 @@ function CalendarGrid({
 function ScheduleLine({ schedule }: { schedule: Schedule }) {
   return (
     <div className="schedule-line">
-      <span style={{ backgroundColor: schedule.color }} />
+      <ScheduleBar color={schedule.color} />
       <div>
         <strong>{schedule.title}</strong>
         <small>{schedule.time}</small>
@@ -1179,7 +1175,11 @@ function TodoList({
     <div className="todo-list">
       {todos.map((todo) => (
         <button key={todo.id} className="todo-row" onClick={() => onToggle(todo.id)}>
-          <span className={todo.done ? "checked" : ""}>{todo.done ? "✓" : ""}</span>
+          {todo.done ? (
+            <Icon name="check" size={31} />
+          ) : (
+            <Icon name="checkbox" size={31} />
+          )}
           <em className={todo.done ? "done" : ""}>{todo.text}</em>
         </button>
       ))}
@@ -1200,7 +1200,9 @@ function ResultCard({
     <section className="result-card">
       <div>
         <h2>{title}</h2>
-        <button onClick={onEdit}>수정</button>
+        <button className="edit-icon-button" onClick={onEdit} aria-label="수정">
+          <Icon name="pencil" />
+        </button>
       </div>
       {children}
     </section>
@@ -1247,7 +1249,7 @@ function ScheduleModal({
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const titleValue = String(formData.get("title") ?? "").trim();
-    const colorValue = String(formData.get("color") ?? "#AFA0FF");
+    const colorValue = String(formData.get("color") ?? scheduleColorChips[0].value);
 
     if (!titleValue) {
       return;
@@ -1295,19 +1297,24 @@ function ScheduleModal({
             <strong>시간 설정*</strong>
             <small>하루 종일 일정으로 등록돼요.</small>
           </div>
-          <span><i /></span>
+          <Image
+            aria-hidden
+            className="toggle-asset"
+            src="/assets/calendar_popup_svg_assets/07_all_day_toggle_off.svg"
+            alt=""
+            width={90}
+            height={48}
+          />
         </div>
         <p className="field-label">색상*</p>
         <div className="color-dots">
-          {["#AFA0FF", "#FFD195", "#9EE6CF", "#FF9EB5"].map((color, index) => (
-            <label key={color} style={{ backgroundColor: color }}>
-              <input
-                type="radio"
-                name="color"
-                value={color}
-                defaultChecked={index === 0}
-              />
-            </label>
+          {scheduleColorChips.map((chip, index) => (
+            <ColorChip
+              key={chip.value}
+              value={chip.value}
+              asset={chip.asset}
+              defaultChecked={index === 0}
+            />
           ))}
         </div>
         <button className="primary-action full" type="submit">
@@ -1401,7 +1408,7 @@ function EditorModal({
           <div className="todo-editor">
             {initialTodos.map((todo, index) => (
               <div key={`${todo}-${index}`}>
-                <span />
+                <Icon name="checkbox" size={24} />
                 <input name="todo" defaultValue={todo} placeholder="할 일을 입력하세요." />
                 <button type="button" aria-label="할 일 삭제"><Icon name="trash" /></button>
               </div>
@@ -1648,98 +1655,6 @@ function LogoMark({ compact = false }: { compact?: boolean }) {
       height={compact ? 34 : 54}
       priority={!compact}
     />
-  );
-}
-
-function Icon({ name }: { name: IconName }) {
-  const common = {
-    fill: "none",
-    stroke: "currentColor",
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    strokeWidth: 2.35,
-  };
-
-  return (
-    <svg className="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-      {name === "home" && (
-        <>
-          <path {...common} d="m3.5 11 8.5-7.2L20.5 11" />
-          <path {...common} d="M6.5 10.5v8.2h11v-8.2" />
-          <path {...common} d="M10 18.5v-5h4v5" />
-        </>
-      )}
-      {name === "calendar" && (
-        <>
-          <rect {...common} x="4" y="5.5" width="16" height="14" rx="3" />
-          <path {...common} d="M8 3.8v3.4M16 3.8v3.4M4.5 10h15" />
-          <path {...common} d="M8 13h.1M12 13h.1M16 13h.1M8 16h.1M12 16h.1" />
-        </>
-      )}
-      {name === "message" && (
-        <>
-          <path {...common} d="M5 18.4V8.8c0-2.7 2-4.6 4.7-4.6h4.6c2.8 0 4.7 1.9 4.7 4.6v3.4c0 2.7-1.9 4.6-4.7 4.6h-4.1L5 20.2v-1.8Z" />
-          <path {...common} d="M9 10.2h.1M12 10.2h.1M15 10.2h.1" />
-        </>
-      )}
-      {name === "record" && (
-        <>
-          <path {...common} d="M7 3.8h7l3 3v13.4H7z" />
-          <path {...common} d="M14 3.8v3.4h3.3M9.5 11h5M9.5 14.5h5M9.5 18h3.4" />
-        </>
-      )}
-      {name === "user" && (
-        <>
-          <circle {...common} cx="12" cy="8" r="3.3" />
-          <path {...common} d="M5.5 20c.7-3.3 3.1-5 6.5-5s5.8 1.7 6.5 5" />
-        </>
-      )}
-      {name === "send" && (
-        <>
-          <path {...common} d="m5 12 13-7-4.6 14-2.7-5.7L5 12Z" />
-          <path {...common} d="m11 13 7-8" />
-        </>
-      )}
-      {name === "plus" && (
-        <>
-          <path {...common} d="M12 5v14M5 12h14" />
-        </>
-      )}
-      {name === "check" && (
-        <>
-          <path {...common} d="m5 12.5 4.2 4.2L19 6.8" />
-        </>
-      )}
-      {name === "close" && (
-        <>
-          <path {...common} d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5" />
-        </>
-      )}
-      {name === "chevron" && (
-        <>
-          <path {...common} d="m9 5 7 7-7 7" />
-        </>
-      )}
-      {name === "trash" && (
-        <>
-          <path {...common} d="M5 7h14M10 11v5M14 11v5" />
-          <path {...common} d="M8 7l.7 12h6.6L16 7M9.5 7l.7-2h3.6l.7 2" />
-        </>
-      )}
-      {name === "kakao" && (
-        <path
-          d="M12 5C7.6 5 4 7.8 4 11.3c0 2.2 1.5 4.2 3.8 5.3l-.6 2.2c-.1.4.3.7.6.4l2.7-1.7c.5.1 1 .1 1.5.1 4.4 0 8-2.8 8-6.3S16.4 5 12 5Z"
-          fill="currentColor"
-        />
-      )}
-      {name === "alert" && (
-        <>
-          <path {...common} d="M12 8v5" />
-          <path {...common} d="M12 17h.1" />
-          <path {...common} d="M10.3 4.5 3.4 17.2c-.7 1.3.2 2.8 1.7 2.8h13.8c1.5 0 2.4-1.5 1.7-2.8L13.7 4.5c-.7-1.3-2.7-1.3-3.4 0Z" />
-        </>
-      )}
-    </svg>
   );
 }
 
