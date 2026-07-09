@@ -82,7 +82,7 @@ async function requestSummary(
     {
       role: "system",
       content:
-        "너는 하루 기록을 JSON으로 정리하는 도우미야. 반드시 JSON만 출력해. 형식: {\"memo\":{\"title\":\"\",\"body\":\"\"},\"todos\":[\"\"],\"schedule\":null 또는 {\"title\":\"\",\"date\":\"YYYY-MM-DD\",\"startTime\":\"HH:mm 또는 null\",\"endTime\":\"HH:mm 또는 null\",\"isAllDay\":true,\"color\":\"#AFA0FF\"}}. 일정 날짜가 불명확하면 오늘 날짜를 사용해.",
+        "너는 하루 기록을 JSON으로 정리하는 도우미야. 반드시 JSON만 출력해. 형식: {\"memo\":{\"title\":\"\",\"body\":\"\"},\"todos\":[\"\"],\"schedules\":[{\"title\":\"\",\"date\":\"YYYY-MM-DD\",\"startTime\":\"HH:mm 또는 null\",\"endTime\":\"HH:mm 또는 null\",\"isAllDay\":true,\"color\":\"#AFA0FF\"}]}. 서로 다른 일정은 반드시 별도 항목으로 분리해. 할 일도 오늘/내일 등 날짜 단서가 있으면 todos 문자열에 날짜를 포함해. 일정 날짜가 불명확하면 오늘 날짜를 사용해.",
     },
     {
       role: "user",
@@ -143,38 +143,53 @@ function normalizeSummary(value: unknown, today: string) {
       isAllDay?: unknown;
       color?: unknown;
     } | null;
+    schedules?: Array<{
+      title?: unknown;
+      date?: unknown;
+      startTime?: unknown;
+      endTime?: unknown;
+      isAllDay?: unknown;
+      color?: unknown;
+    }>;
   };
   const todos = Array.isArray(summary.todos)
     ? summary.todos.filter(
         (todo): todo is string => typeof todo === "string" && todo.trim().length > 0,
       )
     : [];
-  const schedule =
-    summary.schedule && typeof summary.schedule.title === "string"
-      ? {
-          title: summary.schedule.title,
-          date:
-            typeof summary.schedule.date === "string" && summary.schedule.date
-              ? summary.schedule.date
-              : today,
-          startTime:
-            typeof summary.schedule.startTime === "string"
-              ? summary.schedule.startTime
-              : null,
-          endTime:
-            typeof summary.schedule.endTime === "string"
-              ? summary.schedule.endTime
-              : null,
-          isAllDay:
-            typeof summary.schedule.isAllDay === "boolean"
-              ? summary.schedule.isAllDay
-              : !summary.schedule.startTime,
-          color:
-            typeof summary.schedule.color === "string"
-              ? summary.schedule.color
-              : "#AFA0FF",
-        }
-      : null;
+
+  const rawSchedules = Array.isArray(summary.schedules)
+    ? summary.schedules
+    : summary.schedule
+      ? [summary.schedule]
+      : [];
+
+  const schedules = rawSchedules
+    .filter((item) => item && typeof item.title === "string" && item.title.trim())
+    .map((item) => ({
+      title: String(item.title),
+      date:
+        typeof item.date === "string" && item.date
+          ? item.date
+          : today,
+      startTime:
+        typeof item.startTime === "string"
+          ? item.startTime
+          : null,
+      endTime:
+        typeof item.endTime === "string"
+          ? item.endTime
+          : null,
+      isAllDay:
+        typeof item.isAllDay === "boolean"
+          ? item.isAllDay
+          : !item.startTime,
+      color:
+        typeof item.color === "string"
+          ? item.color
+          : "#AFA0FF",
+      accepted: true as boolean | null,
+    }));
 
   return {
     memo: {
@@ -188,7 +203,7 @@ function normalizeSummary(value: unknown, today: string) {
           : "대화를 바탕으로 기록을 정리했어요.",
     },
     todos,
-    schedule,
+    schedules,
   };
 }
 

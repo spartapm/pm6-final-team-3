@@ -8,7 +8,12 @@ import {
   createMemo,
   createSchedule,
   createTodo,
+  deleteMemo,
+  deleteSchedule,
+  deleteTodo,
   loadAppData,
+  updateMemo,
+  updateSchedule,
   updateTodoCompleted,
   upsertProfile,
   type AppMemo,
@@ -36,7 +41,11 @@ type ModalType =
   | "manualMemo"
   | "manualTodo"
   | "saved"
-  | "cancel";
+  | "cancel"
+  | "logout"
+  | "deleteSchedule"
+  | "deleteMemo"
+  | "deleteTodo";
 
 type Todo = AppTodo;
 type Schedule = AppSchedule;
@@ -47,25 +56,30 @@ type Message = {
   from: "user" | "ai";
   text: string;
 };
+type ScheduleSuggestion = {
+  title: string;
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+  isAllDay: boolean;
+  color: string;
+  accepted?: boolean | null;
+};
 type AiSummary = {
   memo: {
     title: string;
     body: string;
   };
   todos: string[];
-  schedule: {
-    title: string;
-    date: string;
-    startTime: string | null;
-    endTime: string | null;
-    isAllDay: boolean;
-    color: string;
-  } | null;
+  schedules: ScheduleSuggestion[];
 };
 type ScheduleFormPayload = {
   title: string;
   date: string;
   color: string;
+  isAllDay: boolean;
+  startTime: string | null;
+  repeatDays: string[];
 };
 type EditorSavePayload =
   | {
@@ -81,7 +95,26 @@ type EditorSavePayload =
     };
 const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
 const today = getTodayInfo();
-const monthDays = buildMonthDays(today.year, today.monthIndex);
+const TAB_STORAGE_KEY = "haru-active-tab";
+
+function readStoredTab(): Tab {
+  if (typeof window === "undefined") {
+    return "home";
+  }
+
+  const stored = window.localStorage.getItem(TAB_STORAGE_KEY);
+  if (
+    stored === "home" ||
+    stored === "calendar" ||
+    stored === "chat" ||
+    stored === "records" ||
+    stored === "my"
+  ) {
+    return stored;
+  }
+
+  return "home";
+}
 
 const initialMessages: Message[] = [
   {
@@ -100,10 +133,11 @@ const navItems: Array<{ tab: Tab; label: string; icon: IconName }> = [
 ];
 
 export default function HaruFairyApp() {
-  const [activeTab, setActiveTab] = useState<Tab>("my");
+  const [activeTab, setActiveTab] = useState<Tab>("home");
   const [recordMode, setRecordMode] = useState<RecordMode>("memo");
   const [chatDone, setChatDone] = useState(false);
   const [modal, setModal] = useState<ModalType | null>(null);
+  const [pendingCloseModal, setPendingCloseModal] = useState<ModalType | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<AppProfile | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -112,24 +146,51 @@ export default function HaruFairyApp() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [messageDraft, setMessageDraft] = useState("");
   const [summary, setSummary] = useState<AiSummary | null>(null);
-  const [selectedDate, setSelectedDate] = useState(today.day);
+  const [viewYear, setViewYear] = useState(today.year);
+  const [viewMonthIndex, setViewMonthIndex] = useState(today.monthIndex);
+  const [selectedDateKey, setSelectedDateKey] = useState(today.dateKey);
+  const [homeSelectedDateKey] = useState(today.dateKey);
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [editingMemo, setEditingMemo] = useState<Memo | null>(null);
+  const [editingScheduleIndex, setEditingScheduleIndex] = useState<number | null>(null);
+  const [deletingTodoId, setDeletingTodoId] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [appError, setAppError] = useState<string | null>(null);
+  const [hasHydratedTab, setHasHydratedTab] = useState(false);
 
+  const monthDays = useMemo(
+    () => buildMonthDays(viewYear, viewMonthIndex),
+    [viewYear, viewMonthIndex],
+  );
+  const viewMonthName = `${viewMonthIndex + 1}월`;
+  const viewMonthTitle = `${viewYear}년 ${viewMonthName}`;
   const todaysTodos = todos.filter((todo) => todo.date === today.dateKey);
   const todaysSchedules = schedules.filter(
     (schedule) => schedule.date === today.dateKey,
   );
   const completedCount = todaysTodos.filter((todo) => todo.done).length;
   const totalCompletedCount = todos.filter((todo) => todo.done).length;
-  const selectedDateKey = formatDateKey(today.year, today.monthIndex, selectedDate);
   const selectedSchedules = schedules.filter(
     (schedule) => schedule.date === selectedDateKey,
   );
   const selectedWeekday = getWeekdayForDateKey(selectedDateKey);
+  const selectedDay = Number(selectedDateKey.split("-")[2]);
+
+  useEffect(() => {
+    const stored = readStoredTab();
+    setActiveTab(stored);
+    setHasHydratedTab(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydratedTab) {
+      return;
+    }
+    window.localStorage.setItem(TAB_STORAGE_KEY, activeTab);
+  }, [activeTab, hasHydratedTab]);
 
   useEffect(() => {
     let mounted = true;
@@ -146,7 +207,9 @@ export default function HaruFairyApp() {
 
       const { data } = await supabase.auth.getSession();
       if (mounted) {
-        void applySession(data.session, { shouldGoHome: Boolean(data.session) });
+        void applySession(data.session, {
+          shouldGoHome: Boolean(data.session) && !window.localStorage.getItem(TAB_STORAGE_KEY),
+        });
       }
     }
 
@@ -157,7 +220,7 @@ export default function HaruFairyApp() {
     } = supabase.auth.onAuthStateChange((event, session) => {
       window.setTimeout(() => {
         void applySession(session, {
-          shouldGoHome: event === "SIGNED_IN" || event === "TOKEN_REFRESHED",
+          shouldGoHome: event === "SIGNED_IN",
         });
       }, 0);
     });
@@ -203,6 +266,9 @@ export default function HaruFairyApp() {
       setSchedules(data.schedules);
       if (options.shouldGoHome) {
         setActiveTab("home");
+      } else {
+        const stored = readStoredTab();
+        setActiveTab(stored === "my" ? "home" : stored);
       }
     } catch (error) {
       setAppError(getErrorMessage(error));
@@ -222,7 +288,51 @@ export default function HaruFairyApp() {
       selected: cell.dateKey === selectedDateKey,
       hasSchedule: scheduledDates.has(cell.dateKey),
     }));
-  }, [schedules, selectedDateKey]);
+  }, [monthDays, schedules, selectedDateKey]);
+
+  const homeCalendarCells = useMemo(() => {
+    const scheduledDates = new Set(schedules.map((schedule) => schedule.date));
+    const homeDays = buildMonthDays(today.year, today.monthIndex);
+
+    return homeDays.map((cell) => ({
+      id: cell.dateKey,
+      day: cell.day,
+      muted: cell.muted,
+      today: cell.dateKey === today.dateKey,
+      selected: cell.dateKey === homeSelectedDateKey,
+      hasSchedule: scheduledDates.has(cell.dateKey),
+    }));
+  }, [homeSelectedDateKey, schedules]);
+
+  function shiftMonth(delta: number) {
+    const next = new Date(viewYear, viewMonthIndex + delta, 1);
+    const nextYear = next.getFullYear();
+    const nextMonth = next.getMonth();
+    setViewYear(nextYear);
+    setViewMonthIndex(nextMonth);
+
+    const selected = new Date(`${selectedDateKey}T00:00:00`);
+    if (selected.getFullYear() !== nextYear || selected.getMonth() !== nextMonth) {
+      const day = Math.min(selected.getDate(), new Date(nextYear, nextMonth + 1, 0).getDate());
+      setSelectedDateKey(formatDateKey(nextYear, nextMonth, day));
+    }
+  }
+
+  function selectCalendarDate(dateKey: string) {
+    setSelectedDateKey(dateKey);
+    const date = new Date(`${dateKey}T00:00:00`);
+    setViewYear(date.getFullYear());
+    setViewMonthIndex(date.getMonth());
+  }
+
+  function requestCloseModal(source: ModalType, dirty: boolean) {
+    if (dirty) {
+      setPendingCloseModal(source);
+      setModal("cancel");
+      return;
+    }
+    closeModal();
+  }
 
   async function toggleTodo(id: string) {
     const target = todos.find((todo) => todo.id === id);
@@ -344,7 +454,11 @@ export default function HaruFairyApp() {
     }
 
     try {
-      const [memo, createdTodos, schedule] = await Promise.all([
+      const acceptedSchedules = summary.schedules.filter(
+        (schedule) => schedule.accepted !== false,
+      );
+
+      const [memo, createdTodos, createdSchedules] = await Promise.all([
         createMemo({
           userId,
           date: today.dateKey,
@@ -362,18 +476,20 @@ export default function HaruFairyApp() {
             }),
           ),
         ),
-        summary.schedule
-          ? createSchedule({
+        Promise.all(
+          acceptedSchedules.map((schedule) =>
+            createSchedule({
               userId,
-              date: summary.schedule.date,
-              title: summary.schedule.title,
-              startTime: summary.schedule.startTime,
-              endTime: summary.schedule.endTime,
-              isAllDay: summary.schedule.isAllDay,
-              color: summary.schedule.color,
+              date: schedule.date,
+              title: schedule.title,
+              startTime: schedule.startTime,
+              endTime: schedule.endTime,
+              isAllDay: schedule.isAllDay,
+              color: schedule.color,
               source: "ai",
-            })
-          : Promise.resolve(null),
+            }),
+          ),
+        ),
       ]);
 
       await createChatSummary({
@@ -382,13 +498,13 @@ export default function HaruFairyApp() {
         memoTitle: summary.memo.title,
         memoBody: summary.memo.body,
         todos: summary.todos,
-        scheduleSuggestions: summary.schedule ? [summary.schedule] : [],
+        scheduleSuggestions: acceptedSchedules,
       });
 
       setMemos((current) => [memo, ...current]);
       setTodos((current) => [...createdTodos, ...current]);
-      if (schedule) {
-        setSchedules((current) => [schedule, ...current]);
+      if (createdSchedules.length > 0) {
+        setSchedules((current) => [...createdSchedules, ...current]);
       }
       setModal("saved");
     } catch (error) {
@@ -398,6 +514,11 @@ export default function HaruFairyApp() {
 
   function closeModal() {
     setModal(null);
+    setPendingCloseModal(null);
+    setEditingSchedule(null);
+    setEditingMemo(null);
+    setEditingScheduleIndex(null);
+    setDeletingTodoId(null);
   }
 
   function requireUserId() {
@@ -430,86 +551,150 @@ export default function HaruFairyApp() {
     await supabase.auth.signOut();
     setIsLoggedIn(false);
     setActiveTab("my");
+    window.localStorage.setItem(TAB_STORAGE_KEY, "my");
   }
 
   return (
     <main>
       <section className="screen-shell">
         <div className={`screen-scroll ${session ? "" : "auth-only"}`}>
-          {activeTab === "home" && (
-            <HomeScreen
-              userName={profile?.nickname ?? getProfileFromSession(session).nickname}
-              isLoading={isLoadingData}
-              error={appError}
-              todos={todaysTodos}
-              schedules={todaysSchedules}
-              completedCount={completedCount}
-              calendarCells={calendarCells}
-              onChat={() => setActiveTab("chat")}
-              onCalendar={() => setActiveTab("calendar")}
-              onTodos={() => {
-                setRecordMode("todo");
-                setActiveTab("records");
-              }}
-              onToggleTodo={toggleTodo}
-              onAddTodo={() => setModal("manualTodo")}
-            />
-          )}
-
-          {activeTab === "calendar" && (
-            <CalendarScreen
-              monthTitle={today.monthTitle}
-              monthName={today.monthName}
-              calendarCells={calendarCells}
-              schedules={selectedSchedules}
-              selectedDate={selectedDate}
-              selectedWeekday={selectedWeekday}
-              onSelectDate={setSelectedDate}
-              onCreate={() => setModal("scheduleCreate")}
-              onEdit={() => setModal("scheduleEdit")}
-            />
-          )}
-
-          {activeTab === "chat" && (
-            <ChatScreen
-              messages={messages}
-              summary={summary}
-              draft={messageDraft}
-              chatDone={chatDone}
-              isSending={isSendingMessage}
-              isSummarizing={isSummarizing}
-              onDraft={setMessageDraft}
-              onSend={sendMessage}
-              onFinish={finishChat}
-              onSave={saveSummary}
-              onEditMemo={() => setModal("memoEdit")}
-              onEditTodo={() => setModal("todoEdit")}
-              onEditSchedule={() => setModal("scheduleEdit")}
-            />
-          )}
-
-          {activeTab === "records" && (
-            <RecordsScreen
-              mode={recordMode}
-              memos={memos}
-              todos={todos}
-              completedCount={totalCompletedCount}
-              onMode={setRecordMode}
-              onToggleTodo={toggleTodo}
-              onMemoWrite={() => setModal("manualMemo")}
-              onTodoWrite={() => setModal("manualTodo")}
-              onMemoDetail={() => setModal("memoEdit")}
-            />
-          )}
-
-          {activeTab === "my" && (
+          {!session ? (
             <MyScreen
-              userName={profile?.nickname ?? getProfileFromSession(session).nickname}
-              isLoggedIn={isLoggedIn}
+              userName="사용자"
+              isLoggedIn={false}
               error={appError}
               onLogin={signInWithKakao}
-              onLogout={signOut}
+              onLogout={() => setModal("logout")}
             />
+          ) : (
+            <>
+              {activeTab === "home" && (
+                <HomeScreen
+                  userName={profile?.nickname ?? getProfileFromSession(session).nickname}
+                  isLoading={isLoadingData}
+                  error={appError}
+                  todos={todaysTodos}
+                  schedules={todaysSchedules}
+                  completedCount={completedCount}
+                  calendarCells={homeCalendarCells}
+                  onChat={() => setActiveTab("chat")}
+                  onCalendar={() => setActiveTab("calendar")}
+                  onTodos={() => {
+                    setRecordMode("todo");
+                    setActiveTab("records");
+                  }}
+                  onToggleTodo={toggleTodo}
+                  onAddTodo={() => setModal("manualTodo")}
+                />
+              )}
+
+              {activeTab === "calendar" && (
+                <CalendarScreen
+                  monthTitle={viewMonthTitle}
+                  monthName={viewMonthName}
+                  calendarCells={calendarCells}
+                  schedules={selectedSchedules}
+                  selectedDate={selectedDay}
+                  selectedWeekday={selectedWeekday}
+                  onPrevMonth={() => shiftMonth(-1)}
+                  onNextMonth={() => shiftMonth(1)}
+                  onSelectDate={selectCalendarDate}
+                  onCreate={() => {
+                    setEditingSchedule(null);
+                    setModal("scheduleCreate");
+                  }}
+                  onEdit={(schedule) => {
+                    setEditingSchedule(schedule);
+                    setModal("scheduleEdit");
+                  }}
+                  onDelete={(schedule) => {
+                    setEditingSchedule(schedule);
+                    setModal("deleteSchedule");
+                  }}
+                />
+              )}
+
+              {activeTab === "chat" && (
+                <ChatScreen
+                  messages={messages}
+                  summary={summary}
+                  draft={messageDraft}
+                  chatDone={chatDone}
+                  isSending={isSendingMessage}
+                  isSummarizing={isSummarizing}
+                  onDraft={setMessageDraft}
+                  onSend={sendMessage}
+                  onFinish={finishChat}
+                  onSave={saveSummary}
+                  onBack={() => {
+                    if (chatDone) {
+                      setChatDone(false);
+                      return;
+                    }
+                    setActiveTab("home");
+                  }}
+                  onEditMemo={() => {
+                    setEditingMemo(null);
+                    setModal("memoEdit");
+                  }}
+                  onEditTodo={() => setModal("todoEdit")}
+                  onEditSchedule={(index) => {
+                    setEditingScheduleIndex(index);
+                    setModal("scheduleEdit");
+                  }}
+                  onAcceptSchedule={(index, accepted) => {
+                    setSummary((current) => {
+                      if (!current) {
+                        return current;
+                      }
+                      return {
+                        ...current,
+                        schedules: current.schedules.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, accepted } : item,
+                        ),
+                      };
+                    });
+                  }}
+                />
+              )}
+
+              {activeTab === "records" && (
+                <RecordsScreen
+                  mode={recordMode}
+                  memos={memos}
+                  todos={todos}
+                  onMode={setRecordMode}
+                  onToggleTodo={toggleTodo}
+                  onMemoWrite={() => {
+                    setEditingMemo(null);
+                    setModal("manualMemo");
+                  }}
+                  onTodoWrite={() => setModal("manualTodo")}
+                  onMemoDetail={(memo) => {
+                    setEditingMemo(memo);
+                    setModal("memoEdit");
+                  }}
+                  onDeleteMemo={(memo) => {
+                    setEditingMemo(memo);
+                    setModal("deleteMemo");
+                  }}
+                  onDeleteTodo={(todoId) => {
+                    setDeletingTodoId(todoId);
+                    setModal("deleteTodo");
+                  }}
+                />
+              )}
+
+              {activeTab === "my" && (
+                <MyScreen
+                  userName={profile?.nickname ?? getProfileFromSession(session).nickname}
+                  isLoggedIn={isLoggedIn}
+                  error={appError}
+                  onLogin={signInWithKakao}
+                  onLogout={() => setModal("logout")}
+                />
+              )}
+            </>
           )}
         </div>
         {session && <BottomNav activeTab={activeTab} onTab={setActiveTab} />}
@@ -519,7 +704,8 @@ export default function HaruFairyApp() {
         <ScheduleModal
           title="새 일정"
           submitLabel="일정 추가"
-          onClose={() => setModal("cancel")}
+          defaultDate={selectedDateKey}
+          onClose={(dirty) => requestCloseModal("scheduleCreate", dirty)}
           onSubmit={async (payload) => {
             const userId = requireUserId();
             if (!userId) {
@@ -531,10 +717,13 @@ export default function HaruFairyApp() {
                 userId,
                 date: payload.date,
                 title: payload.title,
-                isAllDay: true,
+                isAllDay: payload.isAllDay,
+                startTime: payload.startTime,
                 color: payload.color,
+                repeatDays: payload.repeatDays,
               });
               setSchedules((current) => [schedule, ...current]);
+              setSelectedDateKey(payload.date);
               closeModal();
             } catch (error) {
               setAppError(getErrorMessage(error));
@@ -548,8 +737,81 @@ export default function HaruFairyApp() {
           title="일정 수정"
           submitLabel="저장"
           compact
-          onClose={() => setModal("cancel")}
-          onSubmit={async () => closeModal()}
+          defaultDate={
+            editingSchedule?.date ??
+            (editingScheduleIndex != null
+              ? summary?.schedules[editingScheduleIndex]?.date
+              : selectedDateKey) ??
+            selectedDateKey
+          }
+          initial={
+            editingSchedule
+              ? {
+                  title: editingSchedule.title,
+                  date: editingSchedule.date,
+                  color: editingSchedule.color,
+                  isAllDay: editingSchedule.isAllDay,
+                  startTime: editingSchedule.isAllDay ? null : editingSchedule.time,
+                  repeatDays: [],
+                }
+              : editingScheduleIndex != null && summary?.schedules[editingScheduleIndex]
+                ? {
+                    title: summary.schedules[editingScheduleIndex].title,
+                    date: summary.schedules[editingScheduleIndex].date,
+                    color: summary.schedules[editingScheduleIndex].color,
+                    isAllDay: summary.schedules[editingScheduleIndex].isAllDay,
+                    startTime: summary.schedules[editingScheduleIndex].startTime,
+                    repeatDays: [],
+                  }
+                : undefined
+          }
+          onClose={(dirty) => requestCloseModal("scheduleEdit", dirty)}
+          onDelete={
+            editingSchedule
+              ? () => setModal("deleteSchedule")
+              : undefined
+          }
+          onSubmit={async (payload) => {
+            if (editingSchedule) {
+              try {
+                const updated = await updateSchedule({
+                  id: editingSchedule.id,
+                  date: payload.date,
+                  title: payload.title,
+                  isAllDay: payload.isAllDay,
+                  startTime: payload.startTime,
+                  color: payload.color,
+                  repeatDays: payload.repeatDays,
+                });
+                setSchedules((current) =>
+                  current.map((item) => (item.id === updated.id ? updated : item)),
+                );
+                closeModal();
+              } catch (error) {
+                setAppError(getErrorMessage(error));
+              }
+              return;
+            }
+
+            if (editingScheduleIndex != null && summary) {
+              setSummary({
+                ...summary,
+                schedules: summary.schedules.map((item, index) =>
+                  index === editingScheduleIndex
+                    ? {
+                        ...item,
+                        title: payload.title,
+                        date: payload.date,
+                        color: payload.color,
+                        isAllDay: payload.isAllDay,
+                        startTime: payload.startTime,
+                      }
+                    : item,
+                ),
+              });
+              closeModal();
+            }
+          }}
         />
       )}
 
@@ -558,8 +820,47 @@ export default function HaruFairyApp() {
           kind="memo"
           title="메모"
           summary={summary}
-          onClose={() => setModal("cancel")}
-          onSave={async () => closeModal()}
+          initialMemo={editingMemo}
+          onClose={(dirty) => requestCloseModal("memoEdit", dirty)}
+          onDelete={
+            editingMemo
+              ? () => setModal("deleteMemo")
+              : undefined
+          }
+          onSave={async (payload) => {
+            if (payload.kind !== "memo") {
+              return;
+            }
+
+            if (editingMemo) {
+              try {
+                const updated = await updateMemo({
+                  id: editingMemo.id,
+                  date: payload.date,
+                  title: payload.title,
+                  body: payload.body,
+                });
+                setMemos((current) =>
+                  current.map((item) => (item.id === updated.id ? updated : item)),
+                );
+                closeModal();
+              } catch (error) {
+                setAppError(getErrorMessage(error));
+              }
+              return;
+            }
+
+            if (summary) {
+              setSummary({
+                ...summary,
+                memo: {
+                  title: payload.title,
+                  body: payload.body,
+                },
+              });
+              closeModal();
+            }
+          }}
         />
       )}
 
@@ -568,8 +869,17 @@ export default function HaruFairyApp() {
           kind="todo"
           title="할 일"
           summary={summary}
-          onClose={() => setModal("cancel")}
-          onSave={async () => closeModal()}
+          onClose={(dirty) => requestCloseModal("todoEdit", dirty)}
+          onSave={async (payload) => {
+            if (payload.kind !== "todo" || !summary) {
+              return;
+            }
+            setSummary({
+              ...summary,
+              todos: payload.todos,
+            });
+            closeModal();
+          }}
         />
       )}
 
@@ -578,7 +888,7 @@ export default function HaruFairyApp() {
           kind="memo"
           title="메모 작성"
           manual
-          onClose={() => setModal("cancel")}
+          onClose={(dirty) => requestCloseModal("manualMemo", dirty)}
           onSave={async (payload) => {
             const userId = requireUserId();
             if (!userId || payload.kind !== "memo") {
@@ -606,7 +916,7 @@ export default function HaruFairyApp() {
           kind="todo"
           title="할 일 작성"
           manual
-          onClose={() => setModal("cancel")}
+          onClose={(dirty) => requestCloseModal("manualTodo", dirty)}
           onSave={async (payload) => {
             const userId = requireUserId();
             if (!userId || payload.kind !== "todo") {
@@ -641,6 +951,8 @@ export default function HaruFairyApp() {
           onAction={() => {
             closeModal();
             setChatDone(false);
+            setSummary(null);
+            setMessages(initialMessages);
             setRecordMode("memo");
             setActiveTab("records");
           }}
@@ -649,8 +961,79 @@ export default function HaruFairyApp() {
 
       {modal === "cancel" && (
         <ConfirmModal
-          onCancel={closeModal}
+          title="작성을 취소하시겠습니까?"
+          description="변경한 내용은 저장되지 않아요."
+          onCancel={() => setModal(pendingCloseModal)}
           onConfirm={closeModal}
+        />
+      )}
+
+      {modal === "logout" && (
+        <ConfirmModal
+          title="정말 로그아웃 하시겠습니까?"
+          description="로그아웃하면 다시 로그인해야 기록을 볼 수 있어요."
+          onCancel={closeModal}
+          onConfirm={() => {
+            closeModal();
+            void signOut();
+          }}
+        />
+      )}
+
+      {modal === "deleteSchedule" && editingSchedule && (
+        <ConfirmModal
+          title="일정을 삭제할까요?"
+          description="삭제한 일정은 되돌릴 수 없어요."
+          onCancel={() => setModal("scheduleEdit")}
+          onConfirm={async () => {
+            try {
+              await deleteSchedule(editingSchedule.id);
+              setSchedules((current) =>
+                current.filter((item) => item.id !== editingSchedule.id),
+              );
+              closeModal();
+            } catch (error) {
+              setAppError(getErrorMessage(error));
+            }
+          }}
+        />
+      )}
+
+      {modal === "deleteMemo" && editingMemo && (
+        <ConfirmModal
+          title="메모를 삭제할까요?"
+          description="삭제한 메모는 되돌릴 수 없어요."
+          onCancel={() => setModal("memoEdit")}
+          onConfirm={async () => {
+            try {
+              await deleteMemo(editingMemo.id);
+              setMemos((current) =>
+                current.filter((item) => item.id !== editingMemo.id),
+              );
+              closeModal();
+            } catch (error) {
+              setAppError(getErrorMessage(error));
+            }
+          }}
+        />
+      )}
+
+      {modal === "deleteTodo" && deletingTodoId && (
+        <ConfirmModal
+          title="할 일을 삭제할까요?"
+          description="삭제한 할 일은 되돌릴 수 없어요."
+          onCancel={closeModal}
+          onConfirm={async () => {
+            try {
+              await deleteTodo(deletingTodoId);
+              setTodos((current) =>
+                current.filter((item) => item.id !== deletingTodoId),
+              );
+              closeModal();
+            } catch (error) {
+              setAppError(getErrorMessage(error));
+            }
+          }}
         />
       )}
     </main>
@@ -698,6 +1081,7 @@ function HomeScreen({
           <h1>안녕하세요, {userName}님</h1>
           <p>{today.dateLabel}</p>
         </div>
+        <LogoMark compact />
       </header>
 
       {isLoading && <p className="status-copy">기록을 불러오는 중이에요...</p>}
@@ -756,9 +1140,12 @@ function CalendarScreen({
   schedules,
   selectedDate,
   selectedWeekday,
+  onPrevMonth,
+  onNextMonth,
   onSelectDate,
   onCreate,
   onEdit,
+  onDelete,
 }: {
   monthTitle: string;
   monthName: string;
@@ -773,18 +1160,21 @@ function CalendarScreen({
   schedules: Schedule[];
   selectedDate: number;
   selectedWeekday: string;
-  onSelectDate: (date: number) => void;
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
+  onSelectDate: (dateKey: string) => void;
   onCreate: () => void;
-  onEdit: () => void;
+  onEdit: (schedule: Schedule) => void;
+  onDelete: (schedule: Schedule) => void;
 }) {
   return (
     <div className="page-stack">
       <header className="page-header centered">
-        <button className="nav-arrow prev" aria-label="이전 월">
+        <button className="nav-arrow prev" aria-label="이전 월" onClick={onPrevMonth}>
           <Icon name="chevron-left" />
         </button>
         <h1>{monthTitle}</h1>
-        <button className="nav-arrow" aria-label="다음 월">
+        <button className="nav-arrow" aria-label="다음 월" onClick={onNextMonth}>
           <Icon name="chevron-right" />
         </button>
       </header>
@@ -801,7 +1191,7 @@ function CalendarScreen({
                 cell.today ? "today" : "",
                 cell.selected ? "selected" : "",
               ].join(" ")}
-              onClick={() => onSelectDate(cell.day)}
+              onClick={() => onSelectDate(cell.id)}
             >
               <span>{cell.day}</span>
               {cell.hasSchedule && <CalendarDot />}
@@ -816,11 +1206,21 @@ function CalendarScreen({
         </p>
         {schedules.length > 0 ? (
           schedules.map((schedule) => (
-            <button key={schedule.id} className="schedule-card" onClick={onEdit}>
-              <ScheduleBar color={schedule.color} />
-              <strong>{schedule.time.replace("오늘 ", "")}</strong>
-              <em>{schedule.title}</em>
-            </button>
+            <div key={schedule.id} className="schedule-card-row">
+              <button className="schedule-card" onClick={() => onEdit(schedule)}>
+                <ScheduleBar color={schedule.color} />
+                <strong>{schedule.time.replace("오늘 ", "")}</strong>
+                <em>{schedule.title}</em>
+              </button>
+              <button
+                type="button"
+                className="schedule-delete-button"
+                aria-label="일정 삭제"
+                onClick={() => onDelete(schedule)}
+              >
+                <Icon name="trash" />
+              </button>
+            </div>
           ))
         ) : (
           <EmptyState text="등록된 일정이 없습니다" />
@@ -845,9 +1245,11 @@ function ChatScreen({
   onSend,
   onFinish,
   onSave,
+  onBack,
   onEditMemo,
   onEditTodo,
   onEditSchedule,
+  onAcceptSchedule,
 }: {
   messages: Message[];
   summary: AiSummary | null;
@@ -859,14 +1261,19 @@ function ChatScreen({
   onSend: () => Promise<void>;
   onFinish: () => Promise<void>;
   onSave: () => void;
+  onBack: () => void;
   onEditMemo: () => void;
   onEditTodo: () => void;
-  onEditSchedule: () => void;
+  onEditSchedule: (index: number) => void;
+  onAcceptSchedule: (index: number, accepted: boolean) => void;
 }) {
   if (chatDone && summary) {
     return (
       <div className="page-stack">
         <header className="page-header result-header">
+          <button type="button" className="back-button" onClick={onBack} aria-label="뒤로가기">
+            <Icon name="chevron-left" />
+          </button>
           <div className="result-header-title">
             <Icon name="sparkle" />
             <h1>오늘의 기록이 완성됐어요</h1>
@@ -883,7 +1290,7 @@ function ChatScreen({
             <ul className="readonly-todos">
               {summary.todos.map((todo) => (
                 <li key={todo}>
-                  <Icon name="checkbox" size={22} />
+                  <Icon name="checkbox" size={18} />
                   {todo}
                 </li>
               ))}
@@ -891,18 +1298,42 @@ function ChatScreen({
           </ResultCard>
         )}
 
-        {summary.schedule && (
-          <ResultCard title="일정 등록 제안" onEdit={onEditSchedule}>
+        {summary.schedules.map((schedule, index) => (
+          <ResultCard
+            key={`${schedule.title}-${index}`}
+            title="일정 등록 제안"
+            onEdit={() => onEditSchedule(index)}
+          >
             <div className="suggestion-card">
-              <strong>{summary.schedule.title}</strong>
+              <strong>{schedule.title}</strong>
               <small>
-                {formatKoreanDate(summary.schedule.date)}
-                {summary.schedule.startTime ? ` ${summary.schedule.startTime}` : " 종일"}
+                {formatKoreanDate(schedule.date)}
+                {schedule.startTime ? ` ${schedule.startTime}` : " 종일"}
               </small>
-              <p>이 일정을 캘린더에 등록할까요?</p>
+              <p>
+                {schedule.accepted === false
+                  ? "이 일정은 무시됩니다."
+                  : "이 일정을 캘린더에 등록할까요?"}
+              </p>
+              <div className="suggestion-actions">
+                <button
+                  type="button"
+                  className={schedule.accepted === false ? "active" : ""}
+                  onClick={() => onAcceptSchedule(index, false)}
+                >
+                  무시
+                </button>
+                <button
+                  type="button"
+                  className={schedule.accepted !== false ? "active" : ""}
+                  onClick={() => onAcceptSchedule(index, true)}
+                >
+                  등록
+                </button>
+              </div>
             </div>
           </ResultCard>
-        )}
+        ))}
 
         <button className="primary-action bottom-space" onClick={onSave}>
           저장하고 완료
@@ -914,6 +1345,9 @@ function ChatScreen({
   return (
     <div className="chat-layout">
       <header className="page-header">
+        <button type="button" className="back-button" onClick={onBack} aria-label="뒤로가기">
+          <Icon name="chevron-left" />
+        </button>
         <h1>대화</h1>
         <p>편하게 대화하시면 메모, 일정 등을 AI가 정리해드려요</p>
       </header>
@@ -930,13 +1364,6 @@ function ChatScreen({
           <div className="message-row ai">
             <span className="ai-avatar"><LogoMark compact /></span>
             <p>하루 요정이 답변을 쓰고 있어요...</p>
-          </div>
-        )}
-
-        {messages.some((message) => message.from === "user") && (
-          <div className="extract-card">
-            <span>대화에서 메모, 할 일, 일정 후보를 찾고 있어요</span>
-            <span>대화를 마치면 정리 결과를 확인할 수 있어요</span>
           </div>
         )}
       </section>
@@ -968,24 +1395,27 @@ function RecordsScreen({
   mode,
   memos,
   todos,
-  completedCount,
   onMode,
   onToggleTodo,
   onMemoWrite,
   onTodoWrite,
   onMemoDetail,
+  onDeleteMemo,
+  onDeleteTodo,
 }: {
   mode: RecordMode;
   memos: Memo[];
   todos: Todo[];
-  completedCount: number;
   onMode: (mode: RecordMode) => void;
   onToggleTodo: (id: string) => void;
   onMemoWrite: () => void;
   onTodoWrite: () => void;
-  onMemoDetail: () => void;
+  onMemoDetail: (memo: Memo) => void;
+  onDeleteMemo: (memo: Memo) => void;
+  onDeleteTodo: (todoId: string) => void;
 }) {
   const memoGroups = groupMemosByDate(memos);
+  const todoGroups = groupTodosByDate(todos);
 
   return (
     <div className="page-stack">
@@ -1004,33 +1434,65 @@ function RecordsScreen({
 
       {mode === "memo" ? (
         <section className="record-list">
-          {memoGroups.map((group) => (
-            <div key={group.date} className="record-date-group">
-              <p className="date-heading">{formatKoreanDate(group.date)}</p>
-              {group.items.map((memo) => (
-                <article key={memo.id} className="memo-card">
-                  <button onClick={onMemoDetail}>
-                    <strong>{memo.title}</strong>
-                    <p>{memo.body}</p>
-                  </button>
-                  <button className="more-button" onClick={onMemoDetail} aria-label="메모 상세 보기">
-                    <Icon name="chevron-right" />
-                  </button>
-                </article>
-              ))}
-            </div>
-          ))}
+          {memoGroups.length === 0 ? (
+            <EmptyState text="등록된 메모가 없습니다" />
+          ) : (
+            memoGroups.map((group) => (
+              <div key={group.date} className="record-date-group">
+                <p className="date-heading">{formatKoreanDate(group.date)}</p>
+                {group.items.map((memo) => (
+                  <article key={memo.id} className="memo-card">
+                    <button onClick={() => onMemoDetail(memo)}>
+                      <strong>{memo.title}</strong>
+                      <p>{memo.body}</p>
+                    </button>
+                    <div className="memo-card-actions">
+                      <button
+                        className="more-button"
+                        onClick={() => onMemoDetail(memo)}
+                        aria-label="메모 상세 보기"
+                      >
+                        <Icon name="chevron-right" />
+                      </button>
+                      <button
+                        className="more-button"
+                        onClick={() => onDeleteMemo(memo)}
+                        aria-label="메모 삭제"
+                      >
+                        <Icon name="trash" />
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ))
+          )}
           <button className="floating-plus" onClick={onMemoWrite} aria-label="메모 작성">
             <Icon name="plus" />
           </button>
         </section>
       ) : (
         <section className="todo-card record-todo">
-          <div className="card-title-row">
-            <h2>{today.monthName} {today.day}일 할 일</h2>
-            <span>{completedCount}/{todos.length} 완료</span>
-          </div>
-          <TodoList todos={todos} onToggle={onToggleTodo} emptyText="등록된 할 일이 없습니다" />
+          {todoGroups.length === 0 ? (
+            <EmptyState text="등록된 할 일이 없습니다" />
+          ) : (
+            todoGroups.map((group) => (
+              <div key={group.date} className="record-date-group">
+                <div className="card-title-row">
+                  <h2>{formatKoreanDate(group.date)}</h2>
+                  <span>
+                    {group.items.filter((todo) => todo.done).length}/{group.items.length} 완료
+                  </span>
+                </div>
+                <TodoList
+                  todos={group.items}
+                  onToggle={onToggleTodo}
+                  onDelete={onDeleteTodo}
+                  emptyText="등록된 할 일이 없습니다"
+                />
+              </div>
+            ))
+          )}
           <button className="floating-plus" onClick={onTodoWrite} aria-label="할 일 작성">
             <Icon name="plus" />
           </button>
@@ -1163,10 +1625,12 @@ function ScheduleLine({ schedule }: { schedule: Schedule }) {
 function TodoList({
   todos,
   onToggle,
+  onDelete,
   emptyText = "등록된 항목이 없습니다",
 }: {
   todos: Todo[];
   onToggle: (id: string) => void;
+  onDelete?: (id: string) => void;
   emptyText?: string;
 }) {
   if (todos.length === 0) {
@@ -1176,14 +1640,26 @@ function TodoList({
   return (
     <div className="todo-list">
       {todos.map((todo) => (
-        <button key={todo.id} className="todo-row" onClick={() => onToggle(todo.id)}>
-          {todo.done ? (
-            <Icon name="check" size={31} />
-          ) : (
-            <Icon name="checkbox" size={31} />
+        <div key={todo.id} className="todo-row-wrap">
+          <button className="todo-row" onClick={() => onToggle(todo.id)}>
+            {todo.done ? (
+              <Icon name="check" size={22} />
+            ) : (
+              <Icon name="checkbox" size={22} />
+            )}
+            <em className={todo.done ? "done" : ""}>{todo.text}</em>
+          </button>
+          {onDelete && (
+            <button
+              type="button"
+              className="todo-delete-button"
+              aria-label="할 일 삭제"
+              onClick={() => onDelete(todo.id)}
+            >
+              <Icon name="trash" />
+            </button>
           )}
-          <em className={todo.done ? "done" : ""}>{todo.text}</em>
-        </button>
+        </div>
       ))}
     </div>
   );
@@ -1249,15 +1725,34 @@ function ScheduleModal({
   title,
   submitLabel,
   compact = false,
+  defaultDate,
+  initial,
   onClose,
   onSubmit,
+  onDelete,
 }: {
   title: string;
   submitLabel: string;
   compact?: boolean;
-  onClose: () => void;
+  defaultDate: string;
+  initial?: ScheduleFormPayload;
+  onClose: (dirty: boolean) => void;
   onSubmit: (payload: ScheduleFormPayload) => Promise<void>;
+  onDelete?: () => void;
 }) {
+  const [dateValue, setDateValue] = useState(initial?.date ?? defaultDate);
+  const [repeatDays, setRepeatDays] = useState<string[]>(initial?.repeatDays ?? []);
+  const [isAllDay, setIsAllDay] = useState(initial?.isAllDay ?? true);
+  const [startTime, setStartTime] = useState(initial?.startTime ?? "09:00");
+  const [dirty, setDirty] = useState(false);
+
+  function toggleDay(day: string) {
+    setDirty(true);
+    setRepeatDays((current) =>
+      current.includes(day) ? current.filter((item) => item !== day) : [...current, day],
+    );
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -1270,37 +1765,73 @@ function ScheduleModal({
 
     void onSubmit({
       title: titleValue,
-      date: today.dateKey,
+      date: dateValue,
       color: colorValue,
+      isAllDay,
+      startTime: isAllDay ? null : startTime,
+      repeatDays,
     });
   }
 
   return (
     <ModalShell>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} onChange={() => setDirty(true)}>
         <div className="modal-header">
           <h2>{title}</h2>
-          <button type="button" onClick={onClose} aria-label="닫기"><Icon name="close" /></button>
+          <button
+            type="button"
+            onClick={() => onClose(dirty)}
+            aria-label="닫기"
+          >
+            <Icon name="close" />
+          </button>
         </div>
         <label className="field-label">제목*</label>
         <input
           className="field-input"
           name="title"
-          defaultValue=""
+          defaultValue={initial?.title ?? ""}
           placeholder="일정 제목"
           maxLength={30}
           required
         />
         <div className="date-field-grid">
-          <FieldBox label={`시작일(${today.weekday})`} value={today.dateKey} />
-          <FieldBox label={`종료일(${today.weekday})`} value={today.dateKey} />
+          <label className="field-box date-picker-field">
+            <small>시작일({getWeekdayForDateKey(dateValue)})</small>
+            <input
+              type="date"
+              value={dateValue}
+              onChange={(event) => {
+                setDirty(true);
+                setDateValue(event.target.value);
+              }}
+            />
+          </label>
+          <label className="field-box date-picker-field">
+            <small>종료일({getWeekdayForDateKey(dateValue)})</small>
+            <input
+              type="date"
+              value={dateValue}
+              onChange={(event) => {
+                setDirty(true);
+                setDateValue(event.target.value);
+              }}
+            />
+          </label>
         </div>
         {!compact && (
           <>
             <p className="field-label">반복 요일*</p>
             <div className="weekday-pills">
               {weekdays.map((day) => (
-                <button type="button" key={day} className={day === "화" ? "active" : ""}>{day}</button>
+                <button
+                  type="button"
+                  key={day}
+                  className={repeatDays.includes(day) ? "active" : ""}
+                  onClick={() => toggleDay(day)}
+                >
+                  {day}
+                </button>
               ))}
             </div>
           </>
@@ -1308,17 +1839,35 @@ function ScheduleModal({
         <div className="toggle-row">
           <div>
             <strong>시간 설정*</strong>
-            <small>하루 종일 일정으로 등록돼요.</small>
+            <small>
+              {isAllDay ? "하루 종일 일정으로 등록돼요." : "시작 시간을 선택해주세요."}
+            </small>
           </div>
-          <Image
-            aria-hidden
-            className="toggle-asset"
-            src="/assets/calendar_popup_svg_assets/07_all_day_toggle_off.svg"
-            alt=""
-            width={90}
-            height={48}
-          />
+          <button
+            type="button"
+            className={`time-toggle ${isAllDay ? "" : "on"}`}
+            onClick={() => {
+              setDirty(true);
+              setIsAllDay((current) => !current);
+            }}
+            aria-label="시간 설정 토글"
+          >
+            <i />
+          </button>
         </div>
+        {!isAllDay && (
+          <label className="field-box date-picker-field">
+            <small>시작 시간</small>
+            <input
+              type="time"
+              value={startTime ?? "09:00"}
+              onChange={(event) => {
+                setDirty(true);
+                setStartTime(event.target.value);
+              }}
+            />
+          </label>
+        )}
         <p className="field-label">색상*</p>
         <div className="color-dots">
           {scheduleColorChips.map((chip, index) => (
@@ -1326,13 +1875,24 @@ function ScheduleModal({
               key={chip.value}
               value={chip.value}
               asset={chip.asset}
-              defaultChecked={index === 0}
+              defaultChecked={
+                initial?.color ? initial.color === chip.value : index === 0
+              }
             />
           ))}
         </div>
         <button className="primary-action full" type="submit">
           {submitLabel}
         </button>
+        {onDelete && (
+          <button
+            type="button"
+            className="secondary-action full"
+            onClick={onDelete}
+          >
+            일정 삭제
+          </button>
+        )}
       </form>
     </ModalShell>
   );
@@ -1343,18 +1903,29 @@ function EditorModal({
   title,
   manual = false,
   summary,
+  initialMemo,
   onClose,
   onSave,
+  onDelete,
 }: {
   kind: "memo" | "todo";
   title: string;
   manual?: boolean;
   summary?: AiSummary | null;
-  onClose: () => void;
+  initialMemo?: Memo | null;
+  onClose: (dirty: boolean) => void;
   onSave: (payload: EditorSavePayload) => Promise<void>;
+  onDelete?: () => void;
 }) {
-  const initialMemo = manual ? null : summary?.memo;
-  const initialTodos = manual ? [""] : summary?.todos.length ? summary.todos : [""];
+  const seedMemo = initialMemo ?? (manual ? null : summary?.memo ?? null);
+  const seedTodos = manual
+    ? [""]
+    : summary?.todos.length
+      ? summary.todos
+      : [""];
+  const [dateValue, setDateValue] = useState(initialMemo?.date ?? today.dateKey);
+  const [todoItems, setTodoItems] = useState(seedTodos);
+  const [dirty, setDirty] = useState(false);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1370,17 +1941,14 @@ function EditorModal({
 
       void onSave({
         kind: "memo",
-        date: today.dateKey,
+        date: dateValue,
         title: titleValue || bodyValue.slice(0, 10),
         body: bodyValue,
       });
       return;
     }
 
-    const todos = formData
-      .getAll("todo")
-      .map((value) => String(value).trim())
-      .filter(Boolean);
+    const todos = todoItems.map((value) => value.trim()).filter(Boolean);
 
     if (todos.length === 0) {
       return;
@@ -1388,7 +1956,7 @@ function EditorModal({
 
     void onSave({
       kind: "todo",
-      date: today.dateKey,
+      date: dateValue,
       todos,
     });
   }
@@ -1397,21 +1965,30 @@ function EditorModal({
     <ModalShell>
       <form onSubmit={handleSubmit}>
         <div className="edit-topbar">
-          <button type="button" onClick={onClose}>취소</button>
+          <button type="button" onClick={() => onClose(dirty)}>취소</button>
           <strong>{title}</strong>
           <button type="submit">저장</button>
         </div>
-        <button type="button" className="date-chip">{today.dateLabel}</button>
+        <label className="date-chip date-picker-field">
+          <input
+            type="date"
+            value={dateValue}
+            onChange={(event) => {
+              setDirty(true);
+              setDateValue(event.target.value);
+            }}
+          />
+        </label>
         {kind === "memo" ? (
-          <div className="editor-body">
+          <div className="editor-body" onChange={() => setDirty(true)}>
             <input
               name="title"
-              defaultValue={initialMemo?.title ?? ""}
+              defaultValue={seedMemo?.title ?? ""}
               placeholder="제목"
             />
             <textarea
               name="body"
-              defaultValue={initialMemo?.body ?? ""}
+              defaultValue={seedMemo?.body ?? ""}
               placeholder="내용을 입력하세요."
               rows={8}
               required
@@ -1419,15 +1996,51 @@ function EditorModal({
           </div>
         ) : (
           <div className="todo-editor">
-            {initialTodos.map((todo, index) => (
-              <div key={`${todo}-${index}`}>
-                <Icon name="checkbox" size={24} />
-                <input name="todo" defaultValue={todo} placeholder="할 일을 입력하세요." />
-                <button type="button" aria-label="할 일 삭제"><Icon name="trash" /></button>
+            {todoItems.map((todo, index) => (
+              <div key={`todo-edit-${index}`}>
+                <Icon name="checkbox" size={20} />
+                <input
+                  value={todo}
+                  placeholder="할 일을 입력하세요."
+                  onChange={(event) => {
+                    setDirty(true);
+                    const next = [...todoItems];
+                    next[index] = event.target.value;
+                    setTodoItems(next);
+                  }}
+                />
+                <button
+                  type="button"
+                  aria-label="할 일 삭제"
+                  onClick={() => {
+                    setDirty(true);
+                    setTodoItems((current) =>
+                      current.length === 1
+                        ? [""]
+                        : current.filter((_, itemIndex) => itemIndex !== index),
+                    );
+                  }}
+                >
+                  <Icon name="trash" />
+                </button>
               </div>
             ))}
-            <button type="button" className="ghost-add-button">+ 할 일 추가</button>
+            <button
+              type="button"
+              className="ghost-add-button"
+              onClick={() => {
+                setDirty(true);
+                setTodoItems((current) => [...current, ""]);
+              }}
+            >
+              + 할 일 추가
+            </button>
           </div>
+        )}
+        {onDelete && (
+          <button type="button" className="secondary-action full" onClick={onDelete}>
+            삭제
+          </button>
         )}
       </form>
     </ModalShell>
@@ -1435,17 +2048,21 @@ function EditorModal({
 }
 
 function ConfirmModal({
+  title = "작성을 취소하시겠습니까?",
+  description = "변경한 내용은 저장되지 않아요.",
   onCancel,
   onConfirm,
 }: {
+  title?: string;
+  description?: string;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
   return (
     <SimpleModal
       icon="!"
-      title="작성을 취소하시겠습니까?"
-      description="변경한 내용은 저장되지 않아요."
+      title={title}
+      description={description}
       actionLabel="예"
       secondaryLabel="아니오"
       onAction={onConfirm}
@@ -1591,6 +2208,18 @@ function groupMemosByDate(memos: Memo[]) {
     }
 
     return [...groups, { date: memo.date, items: [memo] }];
+  }, []);
+}
+
+function groupTodosByDate(todos: Todo[]) {
+  return todos.reduce<Array<{ date: string; items: Todo[] }>>((groups, todo) => {
+    const group = groups.find((item) => item.date === todo.date);
+    if (group) {
+      group.items.push(todo);
+      return groups;
+    }
+
+    return [...groups, { date: todo.date, items: [todo] }];
   }, []);
 }
 

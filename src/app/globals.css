@@ -365,6 +365,7 @@ button {
   color: #d8d2f0;
   font-size: var(--font-caption);
   font-weight: var(--weight-body);
+  padding-bottom: 8px;
 }
 
 button.calendar-cell {
@@ -372,7 +373,7 @@ button.calendar-cell {
 }
 
 .calendar-grid.large .calendar-cell {
-  min-height: 36px;
+  min-height: 42px;
   color: #ebe7ff;
   font-size: 16px;
 }
@@ -394,9 +395,11 @@ button.calendar-cell {
 
 .calendar-cell .calendar-dot-asset {
   position: absolute;
-  bottom: -3px;
-  width: 8px;
-  height: 8px;
+  bottom: 2px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  transform: translateX(-50%);
 }
 
 .today-schedule {
@@ -460,7 +463,12 @@ button.calendar-cell {
 .todo-card {
   position: relative;
   border-radius: var(--card-radius);
-  padding: var(--card-padding);
+  padding: 18px;
+}
+
+.home-header .logo-mark {
+  width: 42px;
+  height: 42px;
 }
 
 .card-title-row {
@@ -494,29 +502,57 @@ button.calendar-cell {
 
 .todo-list {
   display: grid;
-  gap: 18px;
+  gap: 12px;
+}
+
+.todo-row-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .todo-row {
   display: flex;
-  width: 100%;
+  min-width: 0;
+  flex: 1;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   background: transparent;
   color: var(--text);
   text-align: left;
 }
 
-.todo-row .ui-icon-asset {
-  flex: 0 0 auto;
+.todo-row .ui-icon-asset,
+.todo-row .ui-icon {
+  width: 22px !important;
+  height: 22px !important;
+  flex: 0 0 22px;
+}
+
+.todo-delete-button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #cfc8ff;
+}
+
+.todo-delete-button .ui-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .todo-row em {
+  min-width: 0;
   color: #eeeaff;
   font-style: normal;
   font-size: var(--font-body);
   line-height: 1.38;
   font-weight: var(--weight-body);
+  overflow-wrap: anywhere;
 }
 
 .todo-row em.done {
@@ -553,17 +589,38 @@ button.calendar-cell {
 }
 
 .page-header.centered button {
+  display: grid;
   width: 40px;
   height: 40px;
+  place-items: center;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.08);
   color: var(--text);
+  padding: 0;
   font-size: 20px;
 }
 
 .page-header.centered button .ui-icon {
   width: 20px;
   height: 20px;
+  margin: 0 auto;
+}
+
+.back-button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  margin-bottom: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  padding: 0;
+}
+
+.back-button .ui-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .nav-arrow.prev .ui-icon,
@@ -594,6 +651,26 @@ button.calendar-cell {
   font-size: var(--font-body);
   line-height: var(--line-body);
   font-weight: var(--weight-label);
+}
+
+.schedule-card-row {
+  display: grid;
+  grid-template-columns: 1fr 42px;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.schedule-delete-button {
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: rgba(255, 158, 181, 0.12);
+  color: #ff9eb5;
+}
+
+.schedule-delete-button .ui-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .schedule-card {
@@ -857,8 +934,11 @@ button.calendar-cell {
   font-weight: var(--weight-body);
 }
 
-.readonly-todos .ui-icon-asset {
-  flex: 0 0 auto;
+.readonly-todos .ui-icon-asset,
+.readonly-todos .ui-icon {
+  width: 18px !important;
+  height: 18px !important;
+  flex: 0 0 18px;
 }
 
 .suggestion-card {
@@ -880,11 +960,31 @@ button.calendar-cell {
   font-weight: var(--weight-body);
 }
 
-.suggestion-card div {
+.suggestion-card p {
+  margin: 10px 0 0;
+  color: #d9d3f0;
+  font-size: var(--font-caption);
+}
+
+.suggestion-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-top: 13px;
+}
+
+.suggestion-actions button {
+  min-height: 42px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #dfd9ff;
+  font-size: var(--font-caption);
+  font-weight: var(--weight-label);
+}
+
+.suggestion-actions button.active {
+  background: var(--primary);
+  color: #241e4d;
 }
 
 .suggestion-card button.primary {
@@ -965,11 +1065,16 @@ button.calendar-cell {
 
 .memo-card {
   display: grid;
-  grid-template-columns: 1fr 40px;
+  grid-template-columns: 1fr auto;
   align-items: center;
   min-height: 92px;
   border-radius: var(--card-radius);
   padding: 20px 18px 20px 24px;
+}
+
+.memo-card-actions {
+  display: grid;
+  gap: 6px;
 }
 
 .memo-card button {
@@ -1223,7 +1328,7 @@ button.calendar-cell {
   z-index: 40;
   inset: 0;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.55);
   padding: 16px;
@@ -1242,6 +1347,7 @@ button.calendar-cell {
 
 .modal-panel.small {
   max-width: 360px;
+  margin: 0 auto;
 }
 
 .modal-header,
@@ -1403,7 +1509,8 @@ button.calendar-cell {
   font-weight: var(--weight-body);
 }
 
-.toggle-row > span {
+.toggle-row > span,
+.time-toggle {
   display: flex;
   width: 48px;
   height: 28px;
@@ -1413,11 +1520,49 @@ button.calendar-cell {
   padding: 3px;
 }
 
-.toggle-row i {
+.time-toggle.on {
+  justify-content: flex-end;
+  background: var(--primary);
+}
+
+.toggle-row i,
+.time-toggle i {
   width: 22px;
   height: 22px;
   border-radius: 50%;
   background: white;
+}
+
+.date-picker-field {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+}
+
+.date-picker-field input[type="date"],
+.date-picker-field input[type="time"] {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--font-body);
+  font-weight: var(--weight-label);
+}
+
+.date-chip.date-picker-field {
+  display: inline-flex;
+  width: auto;
+  margin-bottom: 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 8px 14px;
+}
+
+.date-chip.date-picker-field input {
+  color: #ded8ff;
+  font-size: var(--font-body);
+  font-weight: var(--weight-title);
 }
 
 .color-dots {

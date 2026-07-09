@@ -228,6 +228,97 @@ export async function updateTodoCompleted(input: {
   }
 }
 
+export async function updateMemo(input: {
+  id: string;
+  date: string;
+  title: string;
+  body: string;
+}) {
+  const { data, error } = await supabase
+    .from("memos")
+    .update({
+      memo_date: input.date,
+      title: input.title,
+      body: input.body,
+    })
+    .eq("id", input.id)
+    .select("id, memo_date, title, body")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  const memo = data as MemoRow;
+  return {
+    id: memo.id,
+    date: memo.memo_date,
+    title: memo.title,
+    body: memo.body,
+  };
+}
+
+export async function deleteMemo(id: string) {
+  const { error } = await supabase.from("memos").delete().eq("id", id);
+  if (error) {
+    throw error;
+  }
+}
+
+export async function deleteTodo(id: string) {
+  const { error } = await supabase.from("todos").delete().eq("id", id);
+  if (error) {
+    throw error;
+  }
+}
+
+export async function updateSchedule(input: {
+  id: string;
+  date: string;
+  title: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  isAllDay?: boolean;
+  color?: string;
+  repeatDays?: string[];
+}) {
+  const { data, error } = await supabase
+    .from("schedules")
+    .update({
+      schedule_date: input.date,
+      title: input.title,
+      start_time: input.startTime ?? null,
+      end_time: input.endTime ?? null,
+      is_all_day: input.isAllDay ?? true,
+      color: input.color ?? "#AFA0FF",
+      repeat_days: input.repeatDays ?? [],
+    })
+    .eq("id", input.id)
+    .select("id, schedule_date, title, start_time, is_all_day, color")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  const schedule = data as ScheduleRow;
+  return {
+    id: schedule.id,
+    date: schedule.schedule_date,
+    title: schedule.title,
+    time: schedule.is_all_day ? "종일" : formatTime(schedule.start_time ?? ""),
+    color: schedule.color,
+    isAllDay: schedule.is_all_day,
+  };
+}
+
+export async function deleteSchedule(id: string) {
+  const { error } = await supabase.from("schedules").delete().eq("id", id);
+  if (error) {
+    throw error;
+  }
+}
+
 export async function createSchedule(input: {
   userId: string;
   date: string;
@@ -236,6 +327,7 @@ export async function createSchedule(input: {
   endTime?: string | null;
   isAllDay?: boolean;
   color?: string;
+  repeatDays?: string[];
   source?: "manual" | "ai";
 }) {
   const { data, error } = await supabase
@@ -248,6 +340,7 @@ export async function createSchedule(input: {
       end_time: input.endTime ?? null,
       is_all_day: input.isAllDay ?? true,
       color: input.color ?? "#AFA0FF",
+      repeat_days: input.repeatDays ?? [],
       source: input.source ?? "manual",
     })
     .select("id, schedule_date, title, start_time, is_all_day, color")
