@@ -17,16 +17,21 @@ export type IconName =
   | "kakao"
   | "alert"
   | "pencil"
-  | "sparkle";
+  | "sparkle"
+  | "chat-fab";
 
 type IconProps = {
   name: IconName;
   className?: string;
   size?: number;
+  active?: boolean;
 };
 
 const assetIcons: Partial<
-  Record<IconName, { src: string; width: number; height: number }>
+  Record<
+    IconName,
+    { src: string; activeSrc?: string; width: number; height: number }
+  >
 > = {
   home: {
     src: "/assets/home_screen_svg_assets/icon_home.svg",
@@ -35,6 +40,7 @@ const assetIcons: Partial<
   },
   calendar: {
     src: "/assets/home_screen_svg_assets/icon_calendar.svg",
+    activeSrc: "/assets/calendar_screen_svg_assets/nav_calendar_active.svg",
     width: 32,
     height: 32,
   },
@@ -52,6 +58,11 @@ const assetIcons: Partial<
     src: "/assets/home_screen_svg_assets/icon_user.svg",
     width: 32,
     height: 32,
+  },
+  send: {
+    src: "/assets/home_screen_svg_assets/icon_send.svg",
+    width: 24,
+    height: 24,
   },
   plus: {
     src: "/assets/home_screen_svg_assets/icon_plus.svg",
@@ -93,18 +104,12 @@ const assetIcons: Partial<
     width: 28,
     height: 28,
   },
+  "chat-fab": {
+    src: "/assets/calendar_screen_svg_assets/fab_chat_active.svg",
+    width: 96,
+    height: 96,
+  },
 };
-
-const maskIcons = new Set<IconName>([
-  "home",
-  "calendar",
-  "message",
-  "record",
-  "user",
-  "plus",
-  "chevron-left",
-  "chevron-right",
-]);
 
 export const scheduleColorChips = [
   {
@@ -136,41 +141,37 @@ export function getScheduleBarAsset(color: string) {
   return "/assets/home_screen_svg_assets/event_bar_purple.svg";
 }
 
-export function Icon({ name, className = "", size }: IconProps) {
+export function Icon({ name, className = "", size, active = false }: IconProps) {
   const asset = assetIcons[name];
 
-  if (asset && maskIcons.has(name)) {
-    return (
-      <span
-        aria-hidden="true"
-        className={`ui-icon ui-icon-mask ${className}`.trim()}
-        style={{
-          WebkitMaskImage: `url(${asset.src})`,
-          maskImage: `url(${asset.src})`,
-          width: size,
-          height: size,
-        }}
-      />
-    );
-  }
-
   if (asset) {
+    const src = active && asset.activeSrc ? asset.activeSrc : asset.src;
+    const pixelSize = size ?? asset.width;
+
     return (
       <Image
         aria-hidden
         className={`ui-icon ui-icon-asset ${className}`.trim()}
-        src={asset.src}
+        src={src}
         alt=""
-        width={size ?? asset.width}
+        width={pixelSize}
         height={size ?? asset.height}
       />
     );
   }
 
-  return <InlineIcon name={name} className={className} />;
+  return <InlineIcon name={name} className={className} size={size} />;
 }
 
-function InlineIcon({ name, className }: { name: IconName; className?: string }) {
+function InlineIcon({
+  name,
+  className,
+  size,
+}: {
+  name: IconName;
+  className?: string;
+  size?: number;
+}) {
   const common = {
     fill: "none",
     stroke: "currentColor",
@@ -183,14 +184,10 @@ function InlineIcon({ name, className }: { name: IconName; className?: string })
     <svg
       className={`ui-icon ui-icon-inline ${className ?? ""}`.trim()}
       viewBox="0 0 24 24"
+      width={size ?? 24}
+      height={size ?? 24}
       aria-hidden="true"
     >
-      {name === "send" && (
-        <>
-          <path {...common} d="m5 12 13-7-4.6 14-2.7-5.7L5 12Z" />
-          <path {...common} d="m11 13 7-8" />
-        </>
-      )}
       {name === "trash" && (
         <>
           <path {...common} d="M5 7h14M10 11v5M14 11v5" />

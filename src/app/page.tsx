@@ -709,7 +709,9 @@ function HomeScreen({
           <strong>기록하고 싶은 내용이 있나요?</strong>
           <small>AI요정 하루가 정리해드릴게요</small>
         </span>
-        <span className="chat-bubble-icon"><Icon name="message" /></span>
+        <span className="chat-bubble-icon">
+          <Icon name="chat-fab" size={56} />
+        </span>
       </button>
 
       <button className="calendar-summary-card" onClick={onCalendar}>
@@ -1218,16 +1220,27 @@ function BottomNav({
 }) {
   return (
     <nav className="bottom-nav">
-      {navItems.map((item) => (
-        <button
-          key={item.tab}
-          className={`${activeTab === item.tab ? "active" : ""} ${item.tab === "chat" ? "center" : ""}`}
-          onClick={() => onTab(item.tab)}
-        >
-          <span><Icon name={item.icon} /></span>
-          {item.label && <small>{item.label}</small>}
-        </button>
-      ))}
+      {navItems.map((item) => {
+        const isCenter = item.tab === "chat";
+        const isActive = activeTab === item.tab;
+
+        return (
+          <button
+            key={item.tab}
+            className={`${isActive ? "active" : ""} ${isCenter ? "center" : ""}`}
+            onClick={() => onTab(item.tab)}
+          >
+            <span className={isCenter ? "nav-fab" : "nav-icon"}>
+              <Icon
+                name={isCenter ? "chat-fab" : item.icon}
+                active={isActive}
+                size={isCenter ? 70 : 28}
+              />
+            </span>
+            {item.label && <small>{item.label}</small>}
+          </button>
+        );
+      })}
     </nav>
   );
 }
