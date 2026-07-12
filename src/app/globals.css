@@ -654,10 +654,38 @@ button.calendar-cell {
 }
 
 .schedule-card-row {
+  display: none;
+}
+
+.swipe-schedule-row {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+}
+
+.swipe-delete-action {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
   display: grid;
-  grid-template-columns: 1fr 42px;
-  gap: 8px;
-  align-items: stretch;
+  width: 88px;
+  place-items: center;
+  background: #ff6b8a;
+  color: white;
+  font-size: var(--font-caption);
+  font-weight: var(--weight-title);
+}
+
+.swipe-schedule-front {
+  position: relative;
+  z-index: 1;
+  touch-action: pan-y;
+  transition: transform 120ms ease;
+}
+
+.swipe-schedule-front .schedule-card {
+  border-radius: 18px;
 }
 
 .schedule-delete-button {
@@ -1136,6 +1164,90 @@ button.calendar-cell {
   display: grid;
   width: 100%;
   gap: 16px;
+}
+
+.auth-mode-tabs {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.auth-mode-tabs button {
+  min-height: 42px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cfc8ff;
+  font-size: var(--font-caption);
+  font-weight: var(--weight-label);
+}
+
+.auth-mode-tabs button.active {
+  background: var(--primary);
+  color: #241e4d;
+}
+
+.auth-form {
+  display: grid;
+  width: 100%;
+  gap: 14px;
+  text-align: left;
+}
+
+.auth-field {
+  display: grid;
+  gap: 8px;
+}
+
+.auth-field span {
+  color: #cbc5e7;
+  font-size: var(--font-caption);
+  font-weight: var(--weight-label);
+}
+
+.auth-field input {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(180, 166, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  padding: 0 14px;
+}
+
+.auth-field small {
+  color: var(--muted);
+  font-size: var(--font-micro);
+}
+
+.auth-password-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.auth-password-row button {
+  min-height: 48px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cfc8ff;
+  padding: 0 12px;
+  font-size: var(--font-micro);
+}
+
+.auth-divider {
+  display: grid;
+  width: 100%;
+  place-items: center;
+  color: var(--muted);
+  font-size: var(--font-micro);
+}
+
+.auth-divider span {
+  position: relative;
+  padding: 0 10px;
 }
 
 .auth-card {

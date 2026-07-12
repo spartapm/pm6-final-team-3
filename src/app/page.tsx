@@ -1,7 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   createChatSummary,
@@ -244,8 +251,9 @@ export default function HaruFairyApp() {
       setMemos([]);
       setTodos([]);
       setSchedules([]);
-      setActiveTab("my");
       setIsLoadingData(false);
+      const stored = readStoredTab();
+      setActiveTab(stored === "my" ? "home" : stored || "home");
       return;
     }
 
@@ -525,11 +533,19 @@ export default function HaruFairyApp() {
     if (!session) {
       setActiveTab("my");
       setModal(null);
-      setAppError("로그인 후 이용할 수 있어요.");
+      setAppError("기록을 저장하려면 로그인이 필요해요.");
       return null;
     }
 
     return session.user.id;
+  }
+
+  function toAuthEmail(rawId: string) {
+    const value = rawId.trim();
+    if (value.includes("@")) {
+      return value;
+    }
+    return `${value}@harufairy.local`;
   }
 
   async function signInWithKakao() {
@@ -547,157 +563,201 @@ export default function HaruFairyApp() {
     });
   }
 
+  async function signInWithEmail(id: string, password: string) {
+    setAppError(null);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: toAuthEmail(id),
+      password,
+    });
+
+    if (error) {
+      setAppError(getErrorMessage(error));
+      throw error;
+    }
+  }
+
+  async function signUpWithEmail(input: {
+    id: string;
+    nickname: string;
+    password: string;
+  }) {
+    setAppError(null);
+    const email = toAuthEmail(input.id);
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password: input.password,
+      options: {
+        data: {
+          name: input.nickname.trim(),
+          nickname: input.nickname.trim(),
+        },
+      },
+    });
+
+    if (error) {
+      setAppError(getErrorMessage(error));
+      throw error;
+    }
+
+    if (data.user && !data.session) {
+      setAppError("가입 메일을 확인한 뒤 로그인해 주세요.");
+      return;
+    }
+
+    if (data.session) {
+      await upsertProfile({
+        userId: data.session.user.id,
+        nickname: input.nickname.trim() || getEmailName(email) || "사용자",
+        provider: "email",
+      });
+    }
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     setIsLoggedIn(false);
-    setActiveTab("my");
-    window.localStorage.setItem(TAB_STORAGE_KEY, "my");
+    setActiveTab("home");
+    window.localStorage.setItem(TAB_STORAGE_KEY, "home");
   }
 
   return (
     <main>
       <section className="screen-shell">
-        <div className={`screen-scroll ${session ? "" : "auth-only"}`}>
-          {!session ? (
-            <MyScreen
-              userName="사용자"
-              isLoggedIn={false}
+        <div className="screen-scroll">
+          {activeTab === "home" && (
+            <HomeScreen
+              userName={
+                session
+                  ? profile?.nickname ?? getProfileFromSession(session).nickname
+                  : "게스트"
+              }
+              isLoading={Boolean(session) && isLoadingData}
               error={appError}
-              onLogin={signInWithKakao}
+              todos={todaysTodos}
+              schedules={todaysSchedules}
+              completedCount={completedCount}
+              calendarCells={homeCalendarCells}
+              onChat={() => setActiveTab("chat")}
+              onCalendar={() => setActiveTab("calendar")}
+              onTodos={() => {
+                setRecordMode("todo");
+                setActiveTab("records");
+              }}
+              onToggleTodo={toggleTodo}
+              onAddTodo={() => setModal("manualTodo")}
+            />
+          )}
+
+          {activeTab === "calendar" && (
+            <CalendarScreen
+              monthTitle={viewMonthTitle}
+              monthName={viewMonthName}
+              calendarCells={calendarCells}
+              schedules={selectedSchedules}
+              selectedDate={selectedDay}
+              selectedWeekday={selectedWeekday}
+              onPrevMonth={() => shiftMonth(-1)}
+              onNextMonth={() => shiftMonth(1)}
+              onSelectDate={selectCalendarDate}
+              onCreate={() => {
+                setEditingSchedule(null);
+                setModal("scheduleCreate");
+              }}
+              onEdit={(schedule) => {
+                setEditingSchedule(schedule);
+                setModal("scheduleEdit");
+              }}
+              onDelete={(schedule) => {
+                setEditingSchedule(schedule);
+                setModal("deleteSchedule");
+              }}
+            />
+          )}
+
+          {activeTab === "chat" && (
+            <ChatScreen
+              messages={messages}
+              summary={summary}
+              draft={messageDraft}
+              chatDone={chatDone}
+              isSending={isSendingMessage}
+              isSummarizing={isSummarizing}
+              onDraft={setMessageDraft}
+              onSend={sendMessage}
+              onFinish={finishChat}
+              onSave={saveSummary}
+              onBack={() => {
+                if (chatDone) {
+                  setChatDone(false);
+                  return;
+                }
+                setActiveTab("home");
+              }}
+              onEditMemo={() => {
+                setEditingMemo(null);
+                setModal("memoEdit");
+              }}
+              onEditTodo={() => setModal("todoEdit")}
+              onEditSchedule={(index) => {
+                setEditingScheduleIndex(index);
+                setModal("scheduleEdit");
+              }}
+              onAcceptSchedule={(index, accepted) => {
+                setSummary((current) => {
+                  if (!current) {
+                    return current;
+                  }
+                  return {
+                    ...current,
+                    schedules: current.schedules.map((item, itemIndex) =>
+                      itemIndex === index ? { ...item, accepted } : item,
+                    ),
+                  };
+                });
+              }}
+            />
+          )}
+
+          {activeTab === "records" && (
+            <RecordsScreen
+              mode={recordMode}
+              memos={memos}
+              todos={todos}
+              onMode={setRecordMode}
+              onToggleTodo={toggleTodo}
+              onMemoWrite={() => {
+                setEditingMemo(null);
+                setModal("manualMemo");
+              }}
+              onTodoWrite={() => setModal("manualTodo")}
+              onMemoDetail={(memo) => {
+                setEditingMemo(memo);
+                setModal("memoEdit");
+              }}
+              onDeleteMemo={(memo) => {
+                setEditingMemo(memo);
+                setModal("deleteMemo");
+              }}
+              onDeleteTodo={(todoId) => {
+                setDeletingTodoId(todoId);
+                setModal("deleteTodo");
+              }}
+            />
+          )}
+
+          {activeTab === "my" && (
+            <MyScreen
+              userName={profile?.nickname ?? getProfileFromSession(session).nickname}
+              isLoggedIn={isLoggedIn}
+              error={appError}
+              onKakaoLogin={signInWithKakao}
+              onEmailLogin={signInWithEmail}
+              onEmailSignUp={signUpWithEmail}
               onLogout={() => setModal("logout")}
             />
-          ) : (
-            <>
-              {activeTab === "home" && (
-                <HomeScreen
-                  userName={profile?.nickname ?? getProfileFromSession(session).nickname}
-                  isLoading={isLoadingData}
-                  error={appError}
-                  todos={todaysTodos}
-                  schedules={todaysSchedules}
-                  completedCount={completedCount}
-                  calendarCells={homeCalendarCells}
-                  onChat={() => setActiveTab("chat")}
-                  onCalendar={() => setActiveTab("calendar")}
-                  onTodos={() => {
-                    setRecordMode("todo");
-                    setActiveTab("records");
-                  }}
-                  onToggleTodo={toggleTodo}
-                  onAddTodo={() => setModal("manualTodo")}
-                />
-              )}
-
-              {activeTab === "calendar" && (
-                <CalendarScreen
-                  monthTitle={viewMonthTitle}
-                  monthName={viewMonthName}
-                  calendarCells={calendarCells}
-                  schedules={selectedSchedules}
-                  selectedDate={selectedDay}
-                  selectedWeekday={selectedWeekday}
-                  onPrevMonth={() => shiftMonth(-1)}
-                  onNextMonth={() => shiftMonth(1)}
-                  onSelectDate={selectCalendarDate}
-                  onCreate={() => {
-                    setEditingSchedule(null);
-                    setModal("scheduleCreate");
-                  }}
-                  onEdit={(schedule) => {
-                    setEditingSchedule(schedule);
-                    setModal("scheduleEdit");
-                  }}
-                  onDelete={(schedule) => {
-                    setEditingSchedule(schedule);
-                    setModal("deleteSchedule");
-                  }}
-                />
-              )}
-
-              {activeTab === "chat" && (
-                <ChatScreen
-                  messages={messages}
-                  summary={summary}
-                  draft={messageDraft}
-                  chatDone={chatDone}
-                  isSending={isSendingMessage}
-                  isSummarizing={isSummarizing}
-                  onDraft={setMessageDraft}
-                  onSend={sendMessage}
-                  onFinish={finishChat}
-                  onSave={saveSummary}
-                  onBack={() => {
-                    if (chatDone) {
-                      setChatDone(false);
-                      return;
-                    }
-                    setActiveTab("home");
-                  }}
-                  onEditMemo={() => {
-                    setEditingMemo(null);
-                    setModal("memoEdit");
-                  }}
-                  onEditTodo={() => setModal("todoEdit")}
-                  onEditSchedule={(index) => {
-                    setEditingScheduleIndex(index);
-                    setModal("scheduleEdit");
-                  }}
-                  onAcceptSchedule={(index, accepted) => {
-                    setSummary((current) => {
-                      if (!current) {
-                        return current;
-                      }
-                      return {
-                        ...current,
-                        schedules: current.schedules.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, accepted } : item,
-                        ),
-                      };
-                    });
-                  }}
-                />
-              )}
-
-              {activeTab === "records" && (
-                <RecordsScreen
-                  mode={recordMode}
-                  memos={memos}
-                  todos={todos}
-                  onMode={setRecordMode}
-                  onToggleTodo={toggleTodo}
-                  onMemoWrite={() => {
-                    setEditingMemo(null);
-                    setModal("manualMemo");
-                  }}
-                  onTodoWrite={() => setModal("manualTodo")}
-                  onMemoDetail={(memo) => {
-                    setEditingMemo(memo);
-                    setModal("memoEdit");
-                  }}
-                  onDeleteMemo={(memo) => {
-                    setEditingMemo(memo);
-                    setModal("deleteMemo");
-                  }}
-                  onDeleteTodo={(todoId) => {
-                    setDeletingTodoId(todoId);
-                    setModal("deleteTodo");
-                  }}
-                />
-              )}
-
-              {activeTab === "my" && (
-                <MyScreen
-                  userName={profile?.nickname ?? getProfileFromSession(session).nickname}
-                  isLoggedIn={isLoggedIn}
-                  error={appError}
-                  onLogin={signInWithKakao}
-                  onLogout={() => setModal("logout")}
-                />
-              )}
-            </>
           )}
         </div>
-        {session && <BottomNav activeTab={activeTab} onTab={setActiveTab} />}
+        <BottomNav activeTab={activeTab} onTab={setActiveTab} />
       </section>
 
       {modal === "scheduleCreate" && (
@@ -1206,21 +1266,12 @@ function CalendarScreen({
         </p>
         {schedules.length > 0 ? (
           schedules.map((schedule) => (
-            <div key={schedule.id} className="schedule-card-row">
-              <button className="schedule-card" onClick={() => onEdit(schedule)}>
-                <ScheduleBar color={schedule.color} />
-                <strong>{schedule.time.replace("오늘 ", "")}</strong>
-                <em>{schedule.title}</em>
-              </button>
-              <button
-                type="button"
-                className="schedule-delete-button"
-                aria-label="일정 삭제"
-                onClick={() => onDelete(schedule)}
-              >
-                <Icon name="trash" />
-              </button>
-            </div>
+            <SwipeScheduleRow
+              key={schedule.id}
+              schedule={schedule}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
           ))
         ) : (
           <EmptyState text="등록된 일정이 없습니다" />
@@ -1506,26 +1557,162 @@ function MyScreen({
   userName,
   isLoggedIn,
   error,
-  onLogin,
+  onKakaoLogin,
+  onEmailLogin,
+  onEmailSignUp,
   onLogout,
 }: {
   userName: string;
   isLoggedIn: boolean;
   error: string | null;
-  onLogin: () => void;
+  onKakaoLogin: () => void;
+  onEmailLogin: (id: string, password: string) => Promise<void>;
+  onEmailSignUp: (input: {
+    id: string;
+    nickname: string;
+    password: string;
+  }) => Promise<void>;
   onLogout: () => void;
 }) {
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
+  const [userId, setUserId] = useState("");
+  const [nickname, setNickname] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFormError(null);
+
+    if (!userId.trim() || !password.trim()) {
+      setFormError("아이디와 비밀번호를 입력해 주세요.");
+      return;
+    }
+
+    if (password.trim().length < 4) {
+      setFormError("비밀번호는 4자리 이상 입력해 주세요.");
+      return;
+    }
+
+    if (authMode === "signup" && !nickname.trim()) {
+      setFormError("닉네임을 입력해 주세요.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      if (authMode === "login") {
+        await onEmailLogin(userId, password);
+      } else {
+        await onEmailSignUp({
+          id: userId,
+          nickname,
+          password,
+        });
+      }
+    } catch {
+      // parent sets appError
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   if (!isLoggedIn) {
     return (
       <div className="auth-gate">
-        {error && <p className="status-copy error">{error}</p>}
+        {(error || formError) && (
+          <p className="status-copy error">{formError || error}</p>
+        )}
         <section className="my-card auth-card">
           <div className="auth-logo">
             <LogoMark />
           </div>
           <h1>하루 요정 시작하기</h1>
-          <p>카카오로 로그인하고 오늘의 기록을 안전하게 저장해요.</p>
-          <button className="kakao-action" onClick={onLogin}>
+          <p>
+            {authMode === "login"
+              ? "카카오 또는 아이디로 로그인할 수 있어요."
+              : "닉네임과 비밀번호로 계정을 만들어요."}
+          </p>
+
+          <div className="auth-mode-tabs">
+            <button
+              type="button"
+              className={authMode === "login" ? "active" : ""}
+              onClick={() => setAuthMode("login")}
+            >
+              로그인
+            </button>
+            <button
+              type="button"
+              className={authMode === "signup" ? "active" : ""}
+              onClick={() => setAuthMode("signup")}
+            >
+              회원가입
+            </button>
+          </div>
+
+          <form className="auth-form" onSubmit={handleSubmit}>
+            <label className="auth-field">
+              <span>아이디</span>
+              <input
+                value={userId}
+                onChange={(event) => setUserId(event.target.value)}
+                placeholder="사용할 아이디"
+                autoComplete="username"
+              />
+            </label>
+            {authMode === "signup" && (
+              <label className="auth-field">
+                <span>닉네임</span>
+                <input
+                  value={nickname}
+                  onChange={(event) => setNickname(event.target.value)}
+                  placeholder="사용할 닉네임"
+                  autoComplete="nickname"
+                />
+              </label>
+            )}
+            <label className="auth-field">
+              <span>비밀번호</span>
+              <div className="auth-password-row">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="비밀번호 입력"
+                  autoComplete={
+                    authMode === "login" ? "current-password" : "new-password"
+                  }
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((current) => !current)}
+                >
+                  {showPassword ? "숨김" : "보기"}
+                </button>
+              </div>
+              <small>숫자 4자리 이상 입력해주세요</small>
+            </label>
+            <button
+              className="primary-action full"
+              type="submit"
+              disabled={isSubmitting}
+            >
+              {isSubmitting
+                ? "처리 중..."
+                : authMode === "login"
+                  ? "로그인"
+                  : "가입하기"}
+            </button>
+          </form>
+
+          <div className="auth-divider">
+            <span>또는</span>
+          </div>
+
+          <button className="kakao-action" onClick={onKakaoLogin}>
             <Icon name="kakao" />
             카카오로 시작하기
           </button>
@@ -1606,6 +1793,81 @@ function CalendarGrid({
           {cell.hasSchedule && <CalendarDot />}
         </span>
       ))}
+    </div>
+  );
+}
+
+function SwipeScheduleRow({
+  schedule,
+  onEdit,
+  onDelete,
+}: {
+  schedule: Schedule;
+  onEdit: (schedule: Schedule) => void;
+  onDelete: (schedule: Schedule) => void;
+}) {
+  const [offset, setOffset] = useState(0);
+  const startX = useRef(0);
+  const startOffset = useRef(0);
+  const dragging = useRef(false);
+
+  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    dragging.current = true;
+    startX.current = event.clientX;
+    startOffset.current = offset;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!dragging.current) {
+      return;
+    }
+    const delta = event.clientX - startX.current;
+    const next = Math.min(0, Math.max(-88, startOffset.current + delta));
+    setOffset(next);
+  }
+
+  function onPointerUp() {
+    if (!dragging.current) {
+      return;
+    }
+    dragging.current = false;
+    setOffset((current) => (current < -44 ? -88 : 0));
+  }
+
+  return (
+    <div className="swipe-schedule-row">
+      <button
+        type="button"
+        className="swipe-delete-action"
+        aria-label="일정 삭제"
+        onClick={() => onDelete(schedule)}
+      >
+        삭제
+      </button>
+      <div
+        className="swipe-schedule-front"
+        style={{ transform: `translateX(${offset}px)` }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        <button
+          className="schedule-card"
+          onClick={() => {
+            if (offset < -20) {
+              setOffset(0);
+              return;
+            }
+            onEdit(schedule);
+          }}
+        >
+          <ScheduleBar color={schedule.color} />
+          <strong>{schedule.time.replace("오늘 ", "")}</strong>
+          <em>{schedule.title}</em>
+        </button>
+      </div>
     </div>
   );
 }
