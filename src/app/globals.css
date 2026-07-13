@@ -522,6 +522,23 @@ button.calendar-cell {
   text-align: left;
 }
 
+.todo-check-button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  border-radius: 10px;
+  background: transparent;
+  color: #cfc8ff;
+}
+
+.todo-check-button .ui-icon-asset,
+.todo-check-button .ui-icon {
+  width: 22px !important;
+  height: 22px !important;
+}
+
 .todo-row .ui-icon-asset,
 .todo-row .ui-icon {
   width: 22px !important;
@@ -1115,6 +1132,23 @@ button.calendar-cell {
 .record-date-group {
   display: grid;
   gap: 13px;
+}
+
+.todo-date-box {
+  gap: 14px;
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+  background: rgba(55, 47, 102, 0.55);
+  box-shadow: var(--card-shadow);
+  padding: 16px 14px 14px;
+}
+
+.todo-date-box .card-title-row {
+  margin-bottom: 2px;
+}
+
+.todo-date-box .todo-list {
+  gap: 10px;
 }
 
 .memo-card {

@@ -206,8 +206,9 @@ export default function HaruFairyApp() {
   const selectedDay = Number(selectedDateKey.split("-")[2]);
 
   useEffect(() => {
-    const stored = readStoredTab();
-    setActiveTab(stored === "my" && !window.localStorage.getItem("haru-has-session") ? "home" : stored);
+    // 링크/새로고침 진입은 항상 홈 화면
+    setActiveTab("home");
+    window.localStorage.setItem(TAB_STORAGE_KEY, "home");
     setHasHydratedTab(true);
   }, []);
 
@@ -273,6 +274,7 @@ export default function HaruFairyApp() {
       setSchedules(guest.schedules);
       setIsLoadingData(false);
       window.localStorage.removeItem("haru-has-session");
+      window.localStorage.setItem(TAB_STORAGE_KEY, "home");
       setActiveTab("home");
       return;
     }
@@ -295,9 +297,7 @@ export default function HaruFairyApp() {
       setSchedules(data.schedules);
       if (options.shouldGoHome) {
         setActiveTab("home");
-      } else {
-        const stored = readStoredTab();
-        setActiveTab(stored === "my" ? "home" : stored);
+        window.localStorage.setItem(TAB_STORAGE_KEY, "home");
       }
     } catch (error) {
       setAppError(getErrorMessage(error));
@@ -1698,7 +1698,7 @@ function RecordsScreen({
             <EmptyState text="등록된 할 일이 없습니다" />
           ) : (
             todoGroups.map((group) => (
-              <div key={group.date} className="record-date-group">
+              <div key={group.date} className="record-date-group todo-date-box">
                 <div className="card-title-row">
                   <h2>{formatKoreanDate(group.date)}</h2>
                   <span>
@@ -1804,7 +1804,7 @@ function MyScreen({
           <h1>하루 요정 시작하기</h1>
           <p>
             {authMode === "login"
-              ? "카카오 또는 아이디로 로그인할 수 있어요."
+              ? "로그인은 선택 사항이에요. 여러 기기에서 기록을 공유하고 싶을 때만 로그인하세요."
               : "닉네임과 비밀번호로 계정을 만들어요."}
           </p>
 
@@ -1983,8 +1983,17 @@ function SwipeScheduleRow({
   const startOffset = useRef(0);
   const dragging = useRef(false);
   const moved = useRef(false);
+  const ignoreClick = useRef(false);
+
+  function resetSwipe() {
+    setOffset(0);
+  }
 
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    // 마우스(노트북)는 스와이프 제스처를 쓰지 않고 클릭 수정만 사용
+    if (event.pointerType === "mouse") {
+      return;
+    }
     dragging.current = true;
     moved.current = false;
     startX.current = event.clientX;
@@ -2009,14 +2018,23 @@ function SwipeScheduleRow({
       return;
     }
     dragging.current = false;
-
-    if (!moved.current) {
-      setOffset(0);
-      onEdit(schedule);
+    if (moved.current) {
+      ignoreClick.current = true;
+      setOffset((current) => (current < -44 ? -88 : 0));
+      window.setTimeout(() => {
+        ignoreClick.current = false;
+      }, 0);
       return;
     }
+    resetSwipe();
+  }
 
-    setOffset((current) => (current < -44 ? -88 : 0));
+  function openEdit() {
+    if (ignoreClick.current || offset < -20) {
+      resetSwipe();
+      return;
+    }
+    onEdit(schedule);
   }
 
   return (
@@ -2037,22 +2055,17 @@ function SwipeScheduleRow({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        <div className="schedule-card">
+        <button type="button" className="schedule-card" onClick={openEdit}>
           <ScheduleBar color={schedule.color} />
           <strong>{schedule.time.replace("오늘 ", "")}</strong>
           <em>{schedule.title}</em>
-          <button
-            type="button"
+          <span
             className="schedule-edit-button"
-            aria-label="일정 수정"
-            onClick={(event) => {
-              event.stopPropagation();
-              onEdit(schedule);
-            }}
+            aria-hidden="true"
           >
             <Icon name="pencil" />
-          </button>
-        </div>
+          </span>
+        </button>
       </div>
     </div>
   );
@@ -2091,12 +2104,23 @@ function TodoList({
     <div className="todo-list">
       {todos.map((todo) => (
         <div key={todo.id} className="todo-row-wrap">
-          <button className="todo-row" onClick={() => onToggle(todo.id)}>
+          <button
+            type="button"
+            className="todo-check-button"
+            aria-label={todo.done ? "완료 취소" : "완료 처리"}
+            onClick={() => onToggle(todo.id)}
+          >
             {todo.done ? (
               <Icon name="check" size={22} />
             ) : (
               <Icon name="checkbox" size={22} />
             )}
+          </button>
+          <button
+            type="button"
+            className="todo-row"
+            onClick={() => onEdit?.(todo)}
+          >
             <em className={todo.done ? "done" : ""}>{todo.text}</em>
           </button>
           {onEdit && (
