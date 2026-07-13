@@ -743,9 +743,10 @@ button.calendar-cell {
   right: max(24px, calc((100vw - 560px) / 2 + var(--screen-x)));
   bottom: 118px;
   display: grid;
-  width: 56px;
-  height: 56px;
+  width: 64px;
+  height: 64px;
   place-items: center;
+  gap: 0;
   border-radius: 50%;
   background: var(--primary);
   box-shadow: 0 0 26px rgba(170, 161, 255, 0.5);
@@ -756,9 +757,16 @@ button.calendar-cell {
 }
 
 .floating-plus .ui-icon {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   margin: 0 auto;
+}
+
+.floating-plus small {
+  margin-top: -2px;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: var(--weight-label);
 }
 
 .chat-layout {
@@ -1546,11 +1554,19 @@ button.calendar-cell {
   font-weight: var(--weight-label);
 }
 
-.date-field-grid {
+.date-field-grid,
+.time-field-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-top: 15px;
+}
+
+.field-help {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: var(--font-micro);
+  line-height: 1.4;
 }
 
 .field-box,

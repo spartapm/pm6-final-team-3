@@ -83,9 +83,11 @@ type AiSummary = {
 type ScheduleFormPayload = {
   title: string;
   date: string;
+  endDate: string;
   color: string;
   isAllDay: boolean;
   startTime: string | null;
+  endTime: string | null;
   repeatDays: string[];
 };
 type EditorSavePayload =
@@ -140,7 +142,7 @@ const navItems: Array<{ tab: Tab; label: string; icon: IconName }> = [
 ];
 
 export default function HaruFairyApp() {
-  const [activeTab, setActiveTab] = useState<Tab>("home");
+  const [activeTab, setActiveTab] = useState<Tab>("my");
   const [recordMode, setRecordMode] = useState<RecordMode>("memo");
   const [chatDone, setChatDone] = useState(false);
   const [modal, setModal] = useState<ModalType | null>(null);
@@ -188,7 +190,12 @@ export default function HaruFairyApp() {
 
   useEffect(() => {
     const stored = readStoredTab();
-    setActiveTab(stored);
+    const hasSessionHint = window.localStorage.getItem("haru-has-session") === "1";
+    if (hasSessionHint) {
+      setActiveTab(stored);
+    } else {
+      setActiveTab("my");
+    }
     setHasHydratedTab(true);
   }, []);
 
@@ -252,11 +259,12 @@ export default function HaruFairyApp() {
       setTodos([]);
       setSchedules([]);
       setIsLoadingData(false);
-      const stored = readStoredTab();
-      setActiveTab(stored === "my" ? "home" : stored || "home");
+      window.localStorage.removeItem("haru-has-session");
+      setActiveTab("my");
       return;
     }
 
+    window.localStorage.setItem("haru-has-session", "1");
     setIsLoadingData(true);
 
     try {
@@ -616,8 +624,9 @@ export default function HaruFairyApp() {
   async function signOut() {
     await supabase.auth.signOut();
     setIsLoggedIn(false);
-    setActiveTab("home");
-    window.localStorage.setItem(TAB_STORAGE_KEY, "home");
+    window.localStorage.removeItem("haru-has-session");
+    setActiveTab("my");
+    window.localStorage.setItem(TAB_STORAGE_KEY, "my");
   }
 
   return (
@@ -773,16 +782,26 @@ export default function HaruFairyApp() {
             }
 
             try {
-              const schedule = await createSchedule({
-                userId,
-                date: payload.date,
-                title: payload.title,
-                isAllDay: payload.isAllDay,
-                startTime: payload.startTime,
-                color: payload.color,
-                repeatDays: payload.repeatDays,
-              });
-              setSchedules((current) => [schedule, ...current]);
+              const targetDates = buildScheduleDates(
+                payload.date,
+                payload.endDate,
+                payload.repeatDays,
+              );
+              const created = await Promise.all(
+                targetDates.map((date) =>
+                  createSchedule({
+                    userId,
+                    date,
+                    title: payload.title,
+                    isAllDay: payload.isAllDay,
+                    startTime: payload.startTime,
+                    endTime: payload.endTime,
+                    color: payload.color,
+                    repeatDays: payload.repeatDays,
+                  }),
+                ),
+              );
+              setSchedules((current) => [...created, ...current]);
               setSelectedDateKey(payload.date);
               closeModal();
             } catch (error) {
@@ -809,18 +828,22 @@ export default function HaruFairyApp() {
               ? {
                   title: editingSchedule.title,
                   date: editingSchedule.date,
+                  endDate: editingSchedule.date,
                   color: editingSchedule.color,
                   isAllDay: editingSchedule.isAllDay,
                   startTime: editingSchedule.isAllDay ? null : editingSchedule.time,
+                  endTime: null,
                   repeatDays: [],
                 }
               : editingScheduleIndex != null && summary?.schedules[editingScheduleIndex]
                 ? {
                     title: summary.schedules[editingScheduleIndex].title,
                     date: summary.schedules[editingScheduleIndex].date,
+                    endDate: summary.schedules[editingScheduleIndex].date,
                     color: summary.schedules[editingScheduleIndex].color,
                     isAllDay: summary.schedules[editingScheduleIndex].isAllDay,
                     startTime: summary.schedules[editingScheduleIndex].startTime,
+                    endTime: summary.schedules[editingScheduleIndex].endTime,
                     repeatDays: [],
                   }
                 : undefined
@@ -840,6 +863,7 @@ export default function HaruFairyApp() {
                   title: payload.title,
                   isAllDay: payload.isAllDay,
                   startTime: payload.startTime,
+                  endTime: payload.endTime,
                   color: payload.color,
                   repeatDays: payload.repeatDays,
                 });
@@ -865,6 +889,7 @@ export default function HaruFairyApp() {
                         color: payload.color,
                         isAllDay: payload.isAllDay,
                         startTime: payload.startTime,
+                        endTime: payload.endTime,
                       }
                     : item,
                 ),
@@ -1280,6 +1305,7 @@ function CalendarScreen({
 
       <button className="floating-plus" onClick={onCreate} aria-label="일정 추가">
         <Icon name="plus" />
+        <small>추가</small>
       </button>
     </div>
   );
@@ -1520,6 +1546,7 @@ function RecordsScreen({
           )}
           <button className="floating-plus" onClick={onMemoWrite} aria-label="메모 작성">
             <Icon name="plus" />
+            <small>추가</small>
           </button>
         </section>
       ) : (
@@ -1546,6 +1573,7 @@ function RecordsScreen({
           )}
           <button className="floating-plus" onClick={onTodoWrite} aria-label="할 일 작성">
             <Icon name="plus" />
+            <small>추가</small>
           </button>
         </section>
       )}
@@ -2002,10 +2030,12 @@ function ScheduleModal({
   onSubmit: (payload: ScheduleFormPayload) => Promise<void>;
   onDelete?: () => void;
 }) {
-  const [dateValue, setDateValue] = useState(initial?.date ?? defaultDate);
+  const [startDate, setStartDate] = useState(initial?.date ?? defaultDate);
+  const [endDate, setEndDate] = useState(initial?.endDate ?? initial?.date ?? defaultDate);
   const [repeatDays, setRepeatDays] = useState<string[]>(initial?.repeatDays ?? []);
   const [isAllDay, setIsAllDay] = useState(initial?.isAllDay ?? true);
   const [startTime, setStartTime] = useState(initial?.startTime ?? "09:00");
+  const [endTime, setEndTime] = useState(initial?.endTime ?? "10:00");
   const [dirty, setDirty] = useState(false);
 
   function toggleDay(day: string) {
@@ -2025,12 +2055,16 @@ function ScheduleModal({
       return;
     }
 
+    const normalizedEndDate = endDate < startDate ? startDate : endDate;
+
     void onSubmit({
       title: titleValue,
-      date: dateValue,
+      date: startDate,
+      endDate: normalizedEndDate,
       color: colorValue,
       isAllDay,
       startTime: isAllDay ? null : startTime,
+      endTime: isAllDay ? null : endTime,
       repeatDays,
     });
   }
@@ -2059,24 +2093,29 @@ function ScheduleModal({
         />
         <div className="date-field-grid">
           <label className="field-box date-picker-field">
-            <small>시작일({getWeekdayForDateKey(dateValue)})</small>
+            <small>시작일({getWeekdayForDateKey(startDate)})</small>
             <input
               type="date"
-              value={dateValue}
+              value={startDate}
               onChange={(event) => {
                 setDirty(true);
-                setDateValue(event.target.value);
+                const next = event.target.value;
+                setStartDate(next);
+                if (endDate < next) {
+                  setEndDate(next);
+                }
               }}
             />
           </label>
           <label className="field-box date-picker-field">
-            <small>종료일({getWeekdayForDateKey(dateValue)})</small>
+            <small>종료일({getWeekdayForDateKey(endDate)})</small>
             <input
               type="date"
-              value={dateValue}
+              value={endDate}
+              min={startDate}
               onChange={(event) => {
                 setDirty(true);
-                setDateValue(event.target.value);
+                setEndDate(event.target.value);
               }}
             />
           </label>
@@ -2096,13 +2135,18 @@ function ScheduleModal({
                 </button>
               ))}
             </div>
+            <p className="field-help">
+              시작일~종료일 범위에서 선택한 요일마다 일정이 생성돼요. 요일을 고르지 않으면 범위의 모든 날짜에 등록돼요.
+            </p>
           </>
         )}
         <div className="toggle-row">
           <div>
             <strong>시간 설정*</strong>
             <small>
-              {isAllDay ? "하루 종일 일정으로 등록돼요." : "시작 시간을 선택해주세요."}
+              {isAllDay
+                ? "하루 종일 일정으로 등록돼요."
+                : "시작 시간과 종료 시간을 선택해주세요."}
             </small>
           </div>
           <button
@@ -2118,17 +2162,30 @@ function ScheduleModal({
           </button>
         </div>
         {!isAllDay && (
-          <label className="field-box date-picker-field">
-            <small>시작 시간</small>
-            <input
-              type="time"
-              value={startTime ?? "09:00"}
-              onChange={(event) => {
-                setDirty(true);
-                setStartTime(event.target.value);
-              }}
-            />
-          </label>
+          <div className="time-field-grid">
+            <label className="field-box date-picker-field">
+              <small>시작 시간</small>
+              <input
+                type="time"
+                value={startTime ?? "09:00"}
+                onChange={(event) => {
+                  setDirty(true);
+                  setStartTime(event.target.value);
+                }}
+              />
+            </label>
+            <label className="field-box date-picker-field">
+              <small>종료 시간</small>
+              <input
+                type="time"
+                value={endTime ?? "10:00"}
+                onChange={(event) => {
+                  setDirty(true);
+                  setEndTime(event.target.value);
+                }}
+              />
+            </label>
+          </div>
         )}
         <p className="field-label">색상*</p>
         <div className="color-dots">
@@ -2457,6 +2514,34 @@ function formatDateKey(year: number, monthIndex: number, day: number) {
   return `${date.getFullYear()}-${month}-${dateDay}`;
 }
 
+function buildScheduleDates(
+  startDate: string,
+  endDate: string,
+  repeatDays: string[],
+) {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  const dates: string[] = [];
+  const cursor = new Date(start);
+
+  while (cursor <= end) {
+    const weekday = weekdays[cursor.getDay()];
+    const dateKey = formatDateKey(
+      cursor.getFullYear(),
+      cursor.getMonth(),
+      cursor.getDate(),
+    );
+
+    if (repeatDays.length === 0 || repeatDays.includes(weekday)) {
+      dates.push(dateKey);
+    }
+
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return dates.length > 0 ? dates : [startDate];
+}
+
 function getWeekdayForDateKey(dateKey: string) {
   return weekdays[new Date(`${dateKey}T00:00:00`).getDay()];
 }
@@ -2553,7 +2638,7 @@ function LogoMark({ compact = false }: { compact?: boolean }) {
   return (
     <Image
       className={compact ? "logo-mark compact" : "logo-mark"}
-      src="/logo.svg"
+      src="/logo.png"
       alt="하루 요정 로고"
       width={compact ? 34 : 54}
       height={compact ? 34 : 54}
