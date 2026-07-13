@@ -142,7 +142,7 @@ const navItems: Array<{ tab: Tab; label: string; icon: IconName }> = [
 ];
 
 export default function HaruFairyApp() {
-  const [activeTab, setActiveTab] = useState<Tab>("my");
+  const [activeTab, setActiveTab] = useState<Tab>("home");
   const [recordMode, setRecordMode] = useState<RecordMode>("memo");
   const [chatDone, setChatDone] = useState(false);
   const [modal, setModal] = useState<ModalType | null>(null);
@@ -190,12 +190,7 @@ export default function HaruFairyApp() {
 
   useEffect(() => {
     const stored = readStoredTab();
-    const hasSessionHint = window.localStorage.getItem("haru-has-session") === "1";
-    if (hasSessionHint) {
-      setActiveTab(stored);
-    } else {
-      setActiveTab("my");
-    }
+    setActiveTab(stored === "my" && !window.localStorage.getItem("haru-has-session") ? "home" : stored);
     setHasHydratedTab(true);
   }, []);
 
@@ -260,7 +255,7 @@ export default function HaruFairyApp() {
       setSchedules([]);
       setIsLoadingData(false);
       window.localStorage.removeItem("haru-has-session");
-      setActiveTab("my");
+      setActiveTab("home");
       return;
     }
 
@@ -625,8 +620,8 @@ export default function HaruFairyApp() {
     await supabase.auth.signOut();
     setIsLoggedIn(false);
     window.localStorage.removeItem("haru-has-session");
-    setActiveTab("my");
-    window.localStorage.setItem(TAB_STORAGE_KEY, "my");
+    setActiveTab("home");
+    window.localStorage.setItem(TAB_STORAGE_KEY, "home");
   }
 
   return (
