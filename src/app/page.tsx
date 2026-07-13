@@ -21,6 +21,7 @@ import {
   loadAppData,
   updateMemo,
   updateSchedule,
+  updateTodo,
   updateTodoCompleted,
   upsertProfile,
   type AppMemo,
@@ -28,6 +29,20 @@ import {
   type AppSchedule,
   type AppTodo,
 } from "@/lib/haru-store";
+import {
+  GUEST_USER_ID,
+  guestCreateMemo,
+  guestCreateSchedule,
+  guestCreateTodo,
+  guestDeleteMemo,
+  guestDeleteSchedule,
+  guestDeleteTodo,
+  guestUpdateMemo,
+  guestUpdateSchedule,
+  guestUpdateTodo,
+  isGuestUser,
+  loadGuestData,
+} from "@/lib/guest-store";
 import {
   CalendarDot,
   ColorChip,
@@ -45,6 +60,7 @@ type ModalType =
   | "scheduleEdit"
   | "memoEdit"
   | "todoEdit"
+  | "todoItemEdit"
   | "manualMemo"
   | "manualTodo"
   | "saved"
@@ -161,6 +177,7 @@ export default function HaruFairyApp() {
   const [homeSelectedDateKey] = useState(today.dateKey);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
   const [editingMemo, setEditingMemo] = useState<Memo | null>(null);
+  const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
   const [editingScheduleIndex, setEditingScheduleIndex] = useState<number | null>(null);
   const [deletingTodoId, setDeletingTodoId] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -250,9 +267,10 @@ export default function HaruFairyApp() {
 
     if (!nextSession) {
       setProfile(null);
-      setMemos([]);
-      setTodos([]);
-      setSchedules([]);
+      const guest = loadGuestData();
+      setMemos(guest.memos);
+      setTodos(guest.todos);
+      setSchedules(guest.schedules);
       setIsLoadingData(false);
       window.localStorage.removeItem("haru-has-session");
       setActiveTab("home");
@@ -359,6 +377,11 @@ export default function HaruFairyApp() {
     );
 
     try {
+      const userId = getActorId();
+      if (isGuestUser(userId)) {
+        guestUpdateTodo({ id, done: nextDone });
+        return;
+      }
       await updateTodoCompleted({ id, completed: nextDone });
     } catch (error) {
       setTodos((current) =>
@@ -373,10 +396,6 @@ export default function HaruFairyApp() {
   async function sendMessage() {
     const text = messageDraft.trim();
     if (!text) {
-      return;
-    }
-
-    if (!requireUserId()) {
       return;
     }
 
@@ -423,10 +442,6 @@ export default function HaruFairyApp() {
   }
 
   async function finishChat() {
-    if (!requireUserId()) {
-      return;
-    }
-
     setIsSummarizing(true);
     setAppError(null);
 
@@ -460,7 +475,7 @@ export default function HaruFairyApp() {
 
   async function saveSummary() {
     const userId = requireUserId();
-    if (!userId || !summary) {
+    if (!summary) {
       return;
     }
 
@@ -468,6 +483,36 @@ export default function HaruFairyApp() {
       const acceptedSchedules = summary.schedules.filter(
         (schedule) => schedule.accepted !== false,
       );
+
+      if (isGuestUser(userId)) {
+        const memo = guestCreateMemo({
+          date: today.dateKey,
+          title: summary.memo.title,
+          body: summary.memo.body,
+        });
+        const createdTodos = summary.todos.map((text) =>
+          guestCreateTodo({
+            date: today.dateKey,
+            text,
+          }),
+        );
+        const createdSchedules = acceptedSchedules.map((schedule) =>
+          guestCreateSchedule({
+            date: schedule.date,
+            title: schedule.title,
+            startTime: schedule.startTime,
+            isAllDay: schedule.isAllDay,
+            color: schedule.color,
+          }),
+        );
+        setMemos((current) => [memo, ...current]);
+        setTodos((current) => [...createdTodos, ...current]);
+        if (createdSchedules.length > 0) {
+          setSchedules((current) => [...createdSchedules, ...current]);
+        }
+        setModal("saved");
+        return;
+      }
 
       const [memo, createdTodos, createdSchedules] = await Promise.all([
         createMemo({
@@ -528,19 +573,17 @@ export default function HaruFairyApp() {
     setPendingCloseModal(null);
     setEditingSchedule(null);
     setEditingMemo(null);
+    setEditingTodo(null);
     setEditingScheduleIndex(null);
     setDeletingTodoId(null);
   }
 
-  function requireUserId() {
-    if (!session) {
-      setActiveTab("my");
-      setModal(null);
-      setAppError("기록을 저장하려면 로그인이 필요해요.");
-      return null;
-    }
+  function getActorId() {
+    return session?.user.id ?? GUEST_USER_ID;
+  }
 
-    return session.user.id;
+  function requireUserId() {
+    return getActorId();
   }
 
   function toAuthEmail(rawId: string) {
@@ -649,6 +692,10 @@ export default function HaruFairyApp() {
               }}
               onToggleTodo={toggleTodo}
               onAddTodo={() => setModal("manualTodo")}
+              onEditTodo={(todo) => {
+                setEditingTodo(todo);
+                setModal("todoItemEdit");
+              }}
             />
           )}
 
@@ -742,6 +789,10 @@ export default function HaruFairyApp() {
                 setEditingMemo(memo);
                 setModal("deleteMemo");
               }}
+              onEditTodo={(todo) => {
+                setEditingTodo(todo);
+                setModal("todoItemEdit");
+              }}
               onDeleteTodo={(todoId) => {
                 setDeletingTodoId(todoId);
                 setModal("deleteTodo");
@@ -772,9 +823,6 @@ export default function HaruFairyApp() {
           onClose={(dirty) => requestCloseModal("scheduleCreate", dirty)}
           onSubmit={async (payload) => {
             const userId = requireUserId();
-            if (!userId) {
-              return;
-            }
 
             try {
               const targetDates = buildScheduleDates(
@@ -782,20 +830,30 @@ export default function HaruFairyApp() {
                 payload.endDate,
                 payload.repeatDays,
               );
-              const created = await Promise.all(
-                targetDates.map((date) =>
-                  createSchedule({
-                    userId,
-                    date,
-                    title: payload.title,
-                    isAllDay: payload.isAllDay,
-                    startTime: payload.startTime,
-                    endTime: payload.endTime,
-                    color: payload.color,
-                    repeatDays: payload.repeatDays,
-                  }),
-                ),
-              );
+              const created = isGuestUser(userId)
+                ? targetDates.map((date) =>
+                    guestCreateSchedule({
+                      date,
+                      title: payload.title,
+                      isAllDay: payload.isAllDay,
+                      startTime: payload.startTime,
+                      color: payload.color,
+                    }),
+                  )
+                : await Promise.all(
+                    targetDates.map((date) =>
+                      createSchedule({
+                        userId,
+                        date,
+                        title: payload.title,
+                        isAllDay: payload.isAllDay,
+                        startTime: payload.startTime,
+                        endTime: payload.endTime,
+                        color: payload.color,
+                        repeatDays: payload.repeatDays,
+                      }),
+                    ),
+                  );
               setSchedules((current) => [...created, ...current]);
               setSelectedDateKey(payload.date);
               closeModal();
@@ -810,7 +868,6 @@ export default function HaruFairyApp() {
         <ScheduleModal
           title="일정 수정"
           submitLabel="저장"
-          compact
           defaultDate={
             editingSchedule?.date ??
             (editingScheduleIndex != null
@@ -826,8 +883,10 @@ export default function HaruFairyApp() {
                   endDate: editingSchedule.date,
                   color: editingSchedule.color,
                   isAllDay: editingSchedule.isAllDay,
-                  startTime: editingSchedule.isAllDay ? null : editingSchedule.time,
-                  endTime: null,
+                  startTime: editingSchedule.isAllDay
+                    ? "09:00"
+                    : normalizeTimeValue(editingSchedule.time),
+                  endTime: "10:00",
                   repeatDays: [],
                 }
               : editingScheduleIndex != null && summary?.schedules[editingScheduleIndex]
@@ -837,8 +896,10 @@ export default function HaruFairyApp() {
                     endDate: summary.schedules[editingScheduleIndex].date,
                     color: summary.schedules[editingScheduleIndex].color,
                     isAllDay: summary.schedules[editingScheduleIndex].isAllDay,
-                    startTime: summary.schedules[editingScheduleIndex].startTime,
-                    endTime: summary.schedules[editingScheduleIndex].endTime,
+                    startTime:
+                      summary.schedules[editingScheduleIndex].startTime ?? "09:00",
+                    endTime:
+                      summary.schedules[editingScheduleIndex].endTime ?? "10:00",
                     repeatDays: [],
                   }
                 : undefined
@@ -852,16 +913,25 @@ export default function HaruFairyApp() {
           onSubmit={async (payload) => {
             if (editingSchedule) {
               try {
-                const updated = await updateSchedule({
-                  id: editingSchedule.id,
-                  date: payload.date,
-                  title: payload.title,
-                  isAllDay: payload.isAllDay,
-                  startTime: payload.startTime,
-                  endTime: payload.endTime,
-                  color: payload.color,
-                  repeatDays: payload.repeatDays,
-                });
+                const updated = isGuestUser(requireUserId())
+                  ? guestUpdateSchedule({
+                      id: editingSchedule.id,
+                      date: payload.date,
+                      title: payload.title,
+                      isAllDay: payload.isAllDay,
+                      startTime: payload.startTime,
+                      color: payload.color,
+                    })
+                  : await updateSchedule({
+                      id: editingSchedule.id,
+                      date: payload.date,
+                      title: payload.title,
+                      isAllDay: payload.isAllDay,
+                      startTime: payload.startTime,
+                      endTime: payload.endTime,
+                      color: payload.color,
+                      repeatDays: payload.repeatDays,
+                    });
                 setSchedules((current) =>
                   current.map((item) => (item.id === updated.id ? updated : item)),
                 );
@@ -914,12 +984,19 @@ export default function HaruFairyApp() {
 
             if (editingMemo) {
               try {
-                const updated = await updateMemo({
-                  id: editingMemo.id,
-                  date: payload.date,
-                  title: payload.title,
-                  body: payload.body,
-                });
+                const updated = isGuestUser(requireUserId())
+                  ? guestUpdateMemo({
+                      id: editingMemo.id,
+                      date: payload.date,
+                      title: payload.title,
+                      body: payload.body,
+                    })
+                  : await updateMemo({
+                      id: editingMemo.id,
+                      date: payload.date,
+                      title: payload.title,
+                      body: payload.body,
+                    });
                 setMemos((current) =>
                   current.map((item) => (item.id === updated.id ? updated : item)),
                 );
@@ -963,6 +1040,43 @@ export default function HaruFairyApp() {
         />
       )}
 
+      {modal === "todoItemEdit" && editingTodo && (
+        <EditorModal
+          kind="todo"
+          title="할 일 수정"
+          manual
+          initialTodos={[editingTodo.text]}
+          initialDate={editingTodo.date}
+          onClose={(dirty) => requestCloseModal("todoItemEdit", dirty)}
+          onSave={async (payload) => {
+            if (payload.kind !== "todo" || payload.todos.length === 0) {
+              return;
+            }
+
+            try {
+              const nextText = payload.todos[0];
+              const updated = isGuestUser(requireUserId())
+                ? guestUpdateTodo({
+                    id: editingTodo.id,
+                    text: nextText,
+                    date: payload.date,
+                  })
+                : await updateTodo({
+                    id: editingTodo.id,
+                    text: nextText,
+                    date: payload.date,
+                  });
+              setTodos((current) =>
+                current.map((item) => (item.id === updated.id ? updated : item)),
+              );
+              closeModal();
+            } catch (error) {
+              setAppError(getErrorMessage(error));
+            }
+          }}
+        />
+      )}
+
       {modal === "manualMemo" && (
         <EditorModal
           kind="memo"
@@ -971,17 +1085,23 @@ export default function HaruFairyApp() {
           onClose={(dirty) => requestCloseModal("manualMemo", dirty)}
           onSave={async (payload) => {
             const userId = requireUserId();
-            if (!userId || payload.kind !== "memo") {
+            if (payload.kind !== "memo") {
               return;
             }
 
             try {
-              const memo = await createMemo({
-                userId,
-                date: payload.date,
-                title: payload.title,
-                body: payload.body,
-              });
+              const memo = isGuestUser(userId)
+                ? guestCreateMemo({
+                    date: payload.date,
+                    title: payload.title,
+                    body: payload.body,
+                  })
+                : await createMemo({
+                    userId,
+                    date: payload.date,
+                    title: payload.title,
+                    body: payload.body,
+                  });
               setMemos((current) => [memo, ...current]);
               closeModal();
             } catch (error) {
@@ -999,20 +1119,27 @@ export default function HaruFairyApp() {
           onClose={(dirty) => requestCloseModal("manualTodo", dirty)}
           onSave={async (payload) => {
             const userId = requireUserId();
-            if (!userId || payload.kind !== "todo") {
+            if (payload.kind !== "todo") {
               return;
             }
 
             try {
-              const createdTodos = await Promise.all(
-                payload.todos.map((text) =>
-                  createTodo({
-                    userId,
-                    date: payload.date,
-                    text,
-                  }),
-                ),
-              );
+              const createdTodos = isGuestUser(userId)
+                ? payload.todos.map((text) =>
+                    guestCreateTodo({
+                      date: payload.date,
+                      text,
+                    }),
+                  )
+                : await Promise.all(
+                    payload.todos.map((text) =>
+                      createTodo({
+                        userId,
+                        date: payload.date,
+                        text,
+                      }),
+                    ),
+                  );
               setTodos((current) => [...current, ...createdTodos]);
               closeModal();
             } catch (error) {
@@ -1051,7 +1178,7 @@ export default function HaruFairyApp() {
       {modal === "logout" && (
         <ConfirmModal
           title="정말 로그아웃 하시겠습니까?"
-          description="로그아웃하면 다시 로그인해야 기록을 볼 수 있어요."
+          description="로그아웃해도 게스트로 홈에서 계속 이용할 수 있어요."
           onCancel={closeModal}
           onConfirm={() => {
             closeModal();
@@ -1067,7 +1194,11 @@ export default function HaruFairyApp() {
           onCancel={() => setModal("scheduleEdit")}
           onConfirm={async () => {
             try {
-              await deleteSchedule(editingSchedule.id);
+              if (isGuestUser(requireUserId())) {
+                guestDeleteSchedule(editingSchedule.id);
+              } else {
+                await deleteSchedule(editingSchedule.id);
+              }
               setSchedules((current) =>
                 current.filter((item) => item.id !== editingSchedule.id),
               );
@@ -1086,7 +1217,11 @@ export default function HaruFairyApp() {
           onCancel={() => setModal("memoEdit")}
           onConfirm={async () => {
             try {
-              await deleteMemo(editingMemo.id);
+              if (isGuestUser(requireUserId())) {
+                guestDeleteMemo(editingMemo.id);
+              } else {
+                await deleteMemo(editingMemo.id);
+              }
               setMemos((current) =>
                 current.filter((item) => item.id !== editingMemo.id),
               );
@@ -1105,7 +1240,11 @@ export default function HaruFairyApp() {
           onCancel={closeModal}
           onConfirm={async () => {
             try {
-              await deleteTodo(deletingTodoId);
+              if (isGuestUser(requireUserId())) {
+                guestDeleteTodo(deletingTodoId);
+              } else {
+                await deleteTodo(deletingTodoId);
+              }
               setTodos((current) =>
                 current.filter((item) => item.id !== deletingTodoId),
               );
@@ -1133,6 +1272,7 @@ function HomeScreen({
   onTodos,
   onToggleTodo,
   onAddTodo,
+  onEditTodo,
 }: {
   userName: string;
   isLoading: boolean;
@@ -1153,6 +1293,7 @@ function HomeScreen({
   onTodos: () => void;
   onToggleTodo: (id: string) => void;
   onAddTodo: () => void;
+  onEditTodo: (todo: Todo) => void;
 }) {
   return (
     <div className="space-y-6">
@@ -1204,7 +1345,12 @@ function HomeScreen({
           <h2>오늘의 할 일</h2>
           <span>{completedCount}/{todos.length} 완료</span>
         </button>
-        <TodoList todos={todos} onToggle={onToggleTodo} emptyText="등록된 할 일이 없습니다" />
+        <TodoList
+          todos={todos}
+          onToggle={onToggleTodo}
+          onEdit={onEditTodo}
+          emptyText="등록된 할 일이 없습니다"
+        />
         <button className="ghost-add-button" onClick={onAddTodo}>
           + 할 일 추가
         </button>
@@ -1473,6 +1619,7 @@ function RecordsScreen({
   onTodoWrite,
   onMemoDetail,
   onDeleteMemo,
+  onEditTodo,
   onDeleteTodo,
 }: {
   mode: RecordMode;
@@ -1484,6 +1631,7 @@ function RecordsScreen({
   onTodoWrite: () => void;
   onMemoDetail: (memo: Memo) => void;
   onDeleteMemo: (memo: Memo) => void;
+  onEditTodo: (todo: Todo) => void;
   onDeleteTodo: (todoId: string) => void;
 }) {
   const memoGroups = groupMemosByDate(memos);
@@ -1560,6 +1708,7 @@ function RecordsScreen({
                 <TodoList
                   todos={group.items}
                   onToggle={onToggleTodo}
+                  onEdit={onEditTodo}
                   onDelete={onDeleteTodo}
                   emptyText="등록된 할 일이 없습니다"
                 />
@@ -1833,9 +1982,11 @@ function SwipeScheduleRow({
   const startX = useRef(0);
   const startOffset = useRef(0);
   const dragging = useRef(false);
+  const moved = useRef(false);
 
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     dragging.current = true;
+    moved.current = false;
     startX.current = event.clientX;
     startOffset.current = offset;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -1846,6 +1997,9 @@ function SwipeScheduleRow({
       return;
     }
     const delta = event.clientX - startX.current;
+    if (Math.abs(delta) > 8) {
+      moved.current = true;
+    }
     const next = Math.min(0, Math.max(-88, startOffset.current + delta));
     setOffset(next);
   }
@@ -1855,6 +2009,13 @@ function SwipeScheduleRow({
       return;
     }
     dragging.current = false;
+
+    if (!moved.current) {
+      setOffset(0);
+      onEdit(schedule);
+      return;
+    }
+
     setOffset((current) => (current < -44 ? -88 : 0));
   }
 
@@ -1876,20 +2037,22 @@ function SwipeScheduleRow({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        <button
-          className="schedule-card"
-          onClick={() => {
-            if (offset < -20) {
-              setOffset(0);
-              return;
-            }
-            onEdit(schedule);
-          }}
-        >
+        <div className="schedule-card">
           <ScheduleBar color={schedule.color} />
           <strong>{schedule.time.replace("오늘 ", "")}</strong>
           <em>{schedule.title}</em>
-        </button>
+          <button
+            type="button"
+            className="schedule-edit-button"
+            aria-label="일정 수정"
+            onClick={(event) => {
+              event.stopPropagation();
+              onEdit(schedule);
+            }}
+          >
+            <Icon name="pencil" />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1910,11 +2073,13 @@ function ScheduleLine({ schedule }: { schedule: Schedule }) {
 function TodoList({
   todos,
   onToggle,
+  onEdit,
   onDelete,
   emptyText = "등록된 항목이 없습니다",
 }: {
   todos: Todo[];
   onToggle: (id: string) => void;
+  onEdit?: (todo: Todo) => void;
   onDelete?: (id: string) => void;
   emptyText?: string;
 }) {
@@ -1934,6 +2099,16 @@ function TodoList({
             )}
             <em className={todo.done ? "done" : ""}>{todo.text}</em>
           </button>
+          {onEdit && (
+            <button
+              type="button"
+              className="todo-edit-button"
+              aria-label="할 일 수정"
+              onClick={() => onEdit(todo)}
+            >
+              <Icon name="pencil" />
+            </button>
+          )}
           {onDelete && (
             <button
               type="button"
@@ -2218,6 +2393,8 @@ function EditorModal({
   manual = false,
   summary,
   initialMemo,
+  initialTodos,
+  initialDate,
   onClose,
   onSave,
   onDelete,
@@ -2227,17 +2404,24 @@ function EditorModal({
   manual?: boolean;
   summary?: AiSummary | null;
   initialMemo?: Memo | null;
+  initialTodos?: string[];
+  initialDate?: string;
   onClose: (dirty: boolean) => void;
   onSave: (payload: EditorSavePayload) => Promise<void>;
   onDelete?: () => void;
 }) {
   const seedMemo = initialMemo ?? (manual ? null : summary?.memo ?? null);
-  const seedTodos = manual
-    ? [""]
-    : summary?.todos.length
-      ? summary.todos
-      : [""];
-  const [dateValue, setDateValue] = useState(initialMemo?.date ?? today.dateKey);
+  const seedTodos =
+    initialTodos && initialTodos.length > 0
+      ? initialTodos
+      : manual
+        ? [""]
+        : summary?.todos.length
+          ? summary.todos
+          : [""];
+  const [dateValue, setDateValue] = useState(
+    initialDate ?? initialMemo?.date ?? today.dateKey,
+  );
   const [todoItems, setTodoItems] = useState(seedTodos);
   const [dirty, setDirty] = useState(false);
 
@@ -2535,6 +2719,17 @@ function buildScheduleDates(
   }
 
   return dates.length > 0 ? dates : [startDate];
+}
+
+function normalizeTimeValue(value: string | null | undefined) {
+  if (!value || value === "종일" || value === "시간 미정") {
+    return "09:00";
+  }
+  const match = value.match(/(\d{1,2}):(\d{2})/);
+  if (!match) {
+    return "09:00";
+  }
+  return `${match[1].padStart(2, "0")}:${match[2]}`;
 }
 
 function getWeekdayForDateKey(dateKey: string) {

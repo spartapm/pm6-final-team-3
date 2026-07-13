@@ -529,6 +529,7 @@ button.calendar-cell {
   flex: 0 0 22px;
 }
 
+.todo-edit-button,
 .todo-delete-button {
   display: grid;
   width: 32px;
@@ -540,6 +541,7 @@ button.calendar-cell {
   color: #cfc8ff;
 }
 
+.todo-edit-button .ui-icon,
 .todo-delete-button .ui-icon {
   width: 16px;
   height: 16px;
@@ -704,7 +706,7 @@ button.calendar-cell {
 .schedule-card {
   display: grid;
   width: 100%;
-  grid-template-columns: 10px 62px 1fr;
+  grid-template-columns: 10px 62px 1fr 40px;
   align-items: center;
   overflow: hidden;
   border: var(--card-border);
@@ -713,6 +715,22 @@ button.calendar-cell {
   color: var(--text);
   text-align: left;
   box-shadow: var(--card-shadow);
+}
+
+.schedule-edit-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  margin-right: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cfc8ff;
+}
+
+.schedule-edit-button .ui-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .schedule-card .schedule-bar-asset {

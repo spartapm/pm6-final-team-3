@@ -228,6 +228,34 @@ export async function updateTodoCompleted(input: {
   }
 }
 
+export async function updateTodo(input: {
+  id: string;
+  text: string;
+  date: string;
+}) {
+  const { data, error } = await supabase
+    .from("todos")
+    .update({
+      text: input.text,
+      todo_date: input.date,
+    })
+    .eq("id", input.id)
+    .select("id, todo_date, text, completed")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  const todo = data as TodoRow;
+  return {
+    id: todo.id,
+    date: todo.todo_date,
+    text: todo.text,
+    done: todo.completed,
+  };
+}
+
 export async function updateMemo(input: {
   id: string;
   date: string;
