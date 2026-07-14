@@ -40,16 +40,18 @@ export function markPendingKakaoLogin() {
   if (typeof window === "undefined") {
     return;
   }
-  window.sessionStorage.setItem(PENDING_KAKAO_LOGIN_KEY, "1");
+  // OAuth 리다이렉트 대비 localStorage 사용
+  window.localStorage.setItem(PENDING_KAKAO_LOGIN_KEY, "1");
 }
 
 export function consumePendingKakaoLogin() {
   if (typeof window === "undefined") {
     return false;
   }
-  const pending = window.sessionStorage.getItem(PENDING_KAKAO_LOGIN_KEY) === "1";
+  const pending = window.localStorage.getItem(PENDING_KAKAO_LOGIN_KEY) === "1";
   if (pending) {
-    window.sessionStorage.removeItem(PENDING_KAKAO_LOGIN_KEY);
+    window.localStorage.removeItem(PENDING_KAKAO_LOGIN_KEY);
   }
   return pending;
 }
+

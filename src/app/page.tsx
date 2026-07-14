@@ -287,9 +287,15 @@ export default function HaruFairyApp() {
     window.localStorage.setItem("haru-has-session", "1");
     setIsLoadingData(true);
 
+    const provider = getProviderFromSession(nextSession);
+    if (isKakaoProvider(nextSession, provider) && consumePendingKakaoLogin()) {
+      window.setTimeout(() => {
+        trackEvent("login_social", { method: "kakao" });
+      }, 500);
+    }
+
     try {
       const authProfile = getProfileFromSession(nextSession);
-      const provider = getProviderFromSession(nextSession);
       await upsertProfile({
         userId: nextSession.user.id,
         nickname: authProfile.nickname,
@@ -301,12 +307,6 @@ export default function HaruFairyApp() {
       setMemos(data.memos);
       setTodos(data.todos);
       setSchedules(data.schedules);
-
-      if (provider === "kakao" && consumePendingKakaoLogin()) {
-        window.setTimeout(() => {
-          trackEvent("login_social", { method: "kakao" });
-        }, 500);
-      }
 
       if (options.shouldGoHome) {
         setActiveTab("home");
@@ -2496,7 +2496,8 @@ function EditorModal({
       const titleValue = String(formData.get("title") ?? "").trim();
       const bodyValue = String(formData.get("body") ?? "").trim();
 
-      if (!bodyValue) {
+      // 제목만 입력해도 저장되도록 (검증 재현: 제목 입력 → 저장)
+      if (!titleValue && !bodyValue) {
         return;
       }
 
@@ -2504,7 +2505,7 @@ function EditorModal({
         kind: "memo",
         date: dateValue,
         title: titleValue || bodyValue.slice(0, 10),
-        body: bodyValue,
+        body: bodyValue || titleValue,
       });
       return;
     }
@@ -2552,7 +2553,6 @@ function EditorModal({
               defaultValue={seedMemo?.body ?? ""}
               placeholder="내용을 입력하세요."
               rows={8}
-              required
             />
           </div>
         ) : (
@@ -2876,6 +2876,15 @@ function getProviderFromSession(session: Session) {
   return typeof session.user.app_metadata.provider === "string"
     ? session.user.app_metadata.provider
     : "kakao";
+}
+
+function isKakaoProvider(session: Session, provider: string) {
+  if (provider.toLowerCase() === "kakao") {
+    return true;
+  }
+  return (session.user.identities ?? []).some(
+    (identity) => identity.provider?.toLowerCase() === "kakao",
+  );
 }
 
 function readMetadataText(metadata: Record<string, unknown>, key: string) {
