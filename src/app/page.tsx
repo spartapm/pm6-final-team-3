@@ -30,6 +30,11 @@ import {
   type AppTodo,
 } from "@/lib/haru-store";
 import {
+  consumePendingKakaoLogin,
+  markPendingKakaoLogin,
+  trackEvent,
+} from "@/lib/analytics";
+import {
   GUEST_USER_ID,
   guestCreateMemo,
   guestCreateSchedule,
@@ -284,17 +289,25 @@ export default function HaruFairyApp() {
 
     try {
       const authProfile = getProfileFromSession(nextSession);
+      const provider = getProviderFromSession(nextSession);
       await upsertProfile({
         userId: nextSession.user.id,
         nickname: authProfile.nickname,
         avatarUrl: authProfile.avatarUrl,
-        provider: getProviderFromSession(nextSession),
+        provider,
       });
       const data = await loadAppData(nextSession.user.id);
       setProfile(normalizeProfile(data.profile, authProfile));
       setMemos(data.memos);
       setTodos(data.todos);
       setSchedules(data.schedules);
+
+      if (provider === "kakao" && consumePendingKakaoLogin()) {
+        window.setTimeout(() => {
+          trackEvent("login_social", { method: "kakao" });
+        }, 500);
+      }
+
       if (options.shouldGoHome) {
         setActiveTab("home");
         window.localStorage.setItem(TAB_STORAGE_KEY, "home");
@@ -399,6 +412,8 @@ export default function HaruFairyApp() {
       return;
     }
 
+    trackEvent("send_to_message");
+
     const nextMessages: Message[] = [
       ...messages,
       { id: Date.now(), from: "user", text },
@@ -442,6 +457,7 @@ export default function HaruFairyApp() {
   }
 
   async function finishChat() {
+    trackEvent("arrange_chat");
     setIsSummarizing(true);
     setAppError(null);
 
@@ -510,6 +526,7 @@ export default function HaruFairyApp() {
         if (createdSchedules.length > 0) {
           setSchedules((current) => [...createdSchedules, ...current]);
         }
+        trackEvent("succeed_to_chat");
         setModal("saved");
         return;
       }
@@ -562,6 +579,7 @@ export default function HaruFairyApp() {
       if (createdSchedules.length > 0) {
         setSchedules((current) => [...createdSchedules, ...current]);
       }
+      trackEvent("succeed_to_chat");
       setModal("saved");
     } catch (error) {
       setAppError(getErrorMessage(error));
@@ -596,6 +614,7 @@ export default function HaruFairyApp() {
 
   async function signInWithKakao() {
     const redirectTo = window.location.origin;
+    markPendingKakaoLogin();
 
     await supabase.auth.signInWithOAuth({
       provider: "kakao",
@@ -607,6 +626,19 @@ export default function HaruFairyApp() {
         },
       },
     });
+  }
+
+  function handleNavTab(tab: Tab) {
+    const navEvents = {
+      home: "click_to_home",
+      calendar: "click_to_calendar",
+      chat: "click_to_chat",
+      records: "click_to_write",
+      my: "click_to_my",
+    } as const;
+
+    trackEvent(navEvents[tab]);
+    setActiveTab(tab);
   }
 
   async function signInWithEmail(id: string, password: string) {
@@ -684,7 +716,10 @@ export default function HaruFairyApp() {
               schedules={todaysSchedules}
               completedCount={completedCount}
               calendarCells={homeCalendarCells}
-              onChat={() => setActiveTab("chat")}
+              onChat={() => {
+                trackEvent("click_to_chat_pop");
+                setActiveTab("chat");
+              }}
               onCalendar={() => setActiveTab("calendar")}
               onTodos={() => {
                 setRecordMode("todo");
@@ -711,6 +746,7 @@ export default function HaruFairyApp() {
               onNextMonth={() => shiftMonth(1)}
               onSelectDate={selectCalendarDate}
               onCreate={() => {
+                trackEvent("add_to_schedule");
                 setEditingSchedule(null);
                 setModal("scheduleCreate");
               }}
@@ -812,7 +848,7 @@ export default function HaruFairyApp() {
             />
           )}
         </div>
-        <BottomNav activeTab={activeTab} onTab={setActiveTab} />
+        <BottomNav activeTab={activeTab} onTab={handleNavTab} />
       </section>
 
       {modal === "scheduleCreate" && (
@@ -856,6 +892,7 @@ export default function HaruFairyApp() {
                   );
               setSchedules((current) => [...created, ...current]);
               setSelectedDateKey(payload.date);
+              trackEvent("succeed_to_schedule");
               closeModal();
             } catch (error) {
               setAppError(getErrorMessage(error));
@@ -1103,6 +1140,7 @@ export default function HaruFairyApp() {
                     body: payload.body,
                   });
               setMemos((current) => [memo, ...current]);
+              trackEvent("add_to_write", { content_type: "memo" });
               closeModal();
             } catch (error) {
               setAppError(getErrorMessage(error));
@@ -1141,6 +1179,7 @@ export default function HaruFairyApp() {
                     ),
                   );
               setTodos((current) => [...current, ...createdTodos]);
+              trackEvent("add_to_write", { content_type: "todo" });
               closeModal();
             } catch (error) {
               setAppError(getErrorMessage(error));
