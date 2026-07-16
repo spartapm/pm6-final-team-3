@@ -81,12 +81,20 @@ async function requestSummary(
   const data = await callOpenAI([
     {
       role: "system",
-      content:
-        "너는 하루 기록을 JSON으로 정리하는 도우미야. 반드시 JSON만 출력해. 형식: {\"memo\":{\"title\":\"\",\"body\":\"\"},\"todos\":[\"\"],\"schedules\":[{\"title\":\"\",\"date\":\"YYYY-MM-DD\",\"startTime\":\"HH:mm 또는 null\",\"endTime\":\"HH:mm 또는 null\",\"isAllDay\":true,\"color\":\"#AFA0FF\"}]}. 서로 다른 일정은 반드시 별도 항목으로 분리해. 할 일도 오늘/내일 등 날짜 단서가 있으면 todos 문자열에 날짜를 포함해. 일정 날짜가 불명확하면 오늘 날짜를 사용해.",
+      content: [
+        "너는 하루 기록을 JSON으로 정리하는 도우미야. 반드시 JSON만 출력해.",
+        '형식: {"memo":{"title":"","body":""},"todos":[""],"schedules":[{"title":"","date":"YYYY-MM-DD","startTime":"HH:mm"|null,"endTime":"HH:mm"|null,"isAllDay":true,"color":"#AFA0FF"}]}',
+        "규칙:",
+        "1) todos는 짧고 행동 중심의 명사구로 작성해. 예: '치과 가기', '정형외과 예약', '보고서 제출'.",
+        "2) todos에 '오늘/내일/모레', '해야 해/가야 해/가야함' 같은 문장형·날짜 표현을 넣지 마.",
+        "3) 날짜/시간 정보는 schedules에만 넣어. 시간이 없으면 startTime/endTime은 JSON null로 두고 isAllDay=true.",
+        "4) 절대 문자열 \"null\"을 넣지 마. 값이 없으면 JSON null을 사용해.",
+        "5) 서로 다른 일정은 별도 schedules 항목으로 분리해. 날짜가 불명확하면 오늘 날짜를 사용해.",
+      ].join(" "),
     },
     {
       role: "user",
-      content: `오늘 날짜는 ${today}야. 아래 대화를 메모, 할 일, 일정 제안으로 정리해줘.`,
+      content: `오늘 날짜는 ${today}야. 아래 대화를 메모, To-do, 일정 제안으로 정리해줘.`,
     },
     ...messages,
   ]);
@@ -110,7 +118,7 @@ async function callOpenAI(messages: Array<{ role: string; content: string }>) {
     },
     body: JSON.stringify({
       model: "gpt-4o-mini",
-      temperature: 0.6,
+      temperature: 0.4,
       messages,
     }),
   });
@@ -128,6 +136,30 @@ function stripCodeFence(content: string) {
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
     .replace(/\s*```$/i, "")
+    .trim();
+}
+
+function normalizeOptionalTime(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (
+    !trimmed ||
+    trimmed.toLowerCase() === "null" ||
+    trimmed.toLowerCase() === "undefined"
+  ) {
+    return null;
+  }
+  return trimmed;
+}
+
+function normalizeTodoText(text: string) {
+  return text
+    .trim()
+    .replace(/^(오늘|내일|모레|글피)\s*/, "")
+    .replace(/(에\s*)?(가야\s*해|가야함|해야\s*해|해야함|해야돼|해야 돼)$/, "")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -153,9 +185,13 @@ function normalizeSummary(value: unknown, today: string) {
     }>;
   };
   const todos = Array.isArray(summary.todos)
-    ? summary.todos.filter(
-        (todo): todo is string => typeof todo === "string" && todo.trim().length > 0,
-      )
+    ? summary.todos
+        .filter(
+          (todo): todo is string =>
+            typeof todo === "string" && todo.trim().length > 0,
+        )
+        .map(normalizeTodoText)
+        .filter(Boolean)
     : [];
 
   const rawSchedules = Array.isArray(summary.schedules)
@@ -166,30 +202,26 @@ function normalizeSummary(value: unknown, today: string) {
 
   const schedules = rawSchedules
     .filter((item) => item && typeof item.title === "string" && item.title.trim())
-    .map((item) => ({
-      title: String(item.title),
-      date:
-        typeof item.date === "string" && item.date
-          ? item.date
-          : today,
-      startTime:
-        typeof item.startTime === "string"
-          ? item.startTime
-          : null,
-      endTime:
-        typeof item.endTime === "string"
-          ? item.endTime
-          : null,
-      isAllDay:
-        typeof item.isAllDay === "boolean"
-          ? item.isAllDay
-          : !item.startTime,
-      color:
-        typeof item.color === "string"
-          ? item.color
-          : "#AFA0FF",
-      accepted: true as boolean | null,
-    }));
+    .map((item) => {
+      const startTime = normalizeOptionalTime(item.startTime);
+      const endTime = normalizeOptionalTime(item.endTime);
+      return {
+        title: String(item.title).trim(),
+        date:
+          typeof item.date === "string" && item.date && item.date !== "null"
+            ? item.date
+            : today,
+        startTime,
+        endTime,
+        isAllDay:
+          typeof item.isAllDay === "boolean" ? item.isAllDay : !startTime,
+        color:
+          typeof item.color === "string" && item.color && item.color !== "null"
+            ? item.color
+            : "#AFA0FF",
+        accepted: true as boolean | null,
+      };
+    });
 
   return {
     memo: {

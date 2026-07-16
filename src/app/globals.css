@@ -393,13 +393,21 @@ button.calendar-cell {
   outline-offset: -2px;
 }
 
-.calendar-cell .calendar-dot-asset {
+.calendar-dot-row {
   position: absolute;
   bottom: 2px;
   left: 50%;
+  display: flex;
+  gap: 2px;
+  transform: translateX(-50%);
+}
+
+.calendar-cell .calendar-dot-asset {
+  display: block;
   width: 6px;
   height: 6px;
-  transform: translateX(-50%);
+  border-radius: 50%;
+  flex: 0 0 6px;
 }
 
 .today-schedule {
@@ -775,7 +783,7 @@ button.calendar-cell {
 .floating-plus {
   position: fixed;
   z-index: 7;
-  right: max(24px, calc((100vw - 560px) / 2 + var(--screen-x)));
+  right: max(20px, calc((100vw - min(100vw, 560px)) / 2 + 20px));
   bottom: 118px;
   display: grid;
   width: 64px;
@@ -1208,6 +1216,9 @@ button.calendar-cell {
 }
 
 .record-todo {
+  position: relative;
+  display: grid;
+  gap: 16px;
   min-height: 430px;
 }
 

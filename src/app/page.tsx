@@ -319,21 +319,30 @@ export default function HaruFairyApp() {
     }
   }
 
-  const calendarCells = useMemo(() => {
-    const scheduledDates = new Set(schedules.map((schedule) => schedule.date));
+  const scheduleColorsByDate = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const schedule of schedules) {
+      const colors = map.get(schedule.date) ?? [];
+      if (!colors.includes(schedule.color)) {
+        colors.push(schedule.color);
+      }
+      map.set(schedule.date, colors);
+    }
+    return map;
+  }, [schedules]);
 
+  const calendarCells = useMemo(() => {
     return monthDays.map((cell) => ({
       id: cell.dateKey,
       day: cell.day,
       muted: cell.muted,
       today: cell.dateKey === today.dateKey,
       selected: cell.dateKey === selectedDateKey,
-      hasSchedule: scheduledDates.has(cell.dateKey),
+      scheduleColors: scheduleColorsByDate.get(cell.dateKey) ?? [],
     }));
-  }, [monthDays, schedules, selectedDateKey]);
+  }, [monthDays, scheduleColorsByDate, selectedDateKey]);
 
   const homeCalendarCells = useMemo(() => {
-    const scheduledDates = new Set(schedules.map((schedule) => schedule.date));
     const homeDays = buildMonthDays(today.year, today.monthIndex);
 
     return homeDays.map((cell) => ({
@@ -342,9 +351,9 @@ export default function HaruFairyApp() {
       muted: cell.muted,
       today: cell.dateKey === today.dateKey,
       selected: cell.dateKey === homeSelectedDateKey,
-      hasSchedule: scheduledDates.has(cell.dateKey),
+      scheduleColors: scheduleColorsByDate.get(cell.dateKey) ?? [],
     }));
-  }, [homeSelectedDateKey, schedules]);
+  }, [homeSelectedDateKey, scheduleColorsByDate]);
 
   function shiftMonth(delta: number) {
     const next = new Date(viewYear, viewMonthIndex + delta, 1);
@@ -612,6 +621,12 @@ export default function HaruFairyApp() {
     return `${value}@harufairy.local`;
   }
 
+  // Supabase Auth 최소 6자 요건을 맞추면서, UX는 숫자 4자리로 유지
+  function toAuthPassword(rawPassword: string) {
+    const value = rawPassword.trim();
+    return value.length < 6 ? `${value}__hf` : value;
+  }
+
   async function signInWithKakao() {
     const redirectTo = window.location.origin;
     markPendingKakaoLogin();
@@ -645,11 +660,11 @@ export default function HaruFairyApp() {
     setAppError(null);
     const { error } = await supabase.auth.signInWithPassword({
       email: toAuthEmail(id),
-      password,
+      password: toAuthPassword(password),
     });
 
     if (error) {
-      setAppError(getErrorMessage(error));
+      setAppError(getAuthErrorMessage(error));
       throw error;
     }
   }
@@ -663,7 +678,7 @@ export default function HaruFairyApp() {
     const email = toAuthEmail(input.id);
     const { data, error } = await supabase.auth.signUp({
       email,
-      password: input.password,
+      password: toAuthPassword(input.password),
       options: {
         data: {
           name: input.nickname.trim(),
@@ -673,7 +688,7 @@ export default function HaruFairyApp() {
     });
 
     if (error) {
-      setAppError(getErrorMessage(error));
+      setAppError(getAuthErrorMessage(error));
       throw error;
     }
 
@@ -1061,7 +1076,7 @@ export default function HaruFairyApp() {
       {modal === "todoEdit" && (
         <EditorModal
           kind="todo"
-          title="할 일"
+          title="To-do"
           summary={summary}
           onClose={(dirty) => requestCloseModal("todoEdit", dirty)}
           onSave={async (payload) => {
@@ -1080,7 +1095,7 @@ export default function HaruFairyApp() {
       {modal === "todoItemEdit" && editingTodo && (
         <EditorModal
           kind="todo"
-          title="할 일 수정"
+          title="To-do 수정"
           manual
           initialTodos={[editingTodo.text]}
           initialDate={editingTodo.date}
@@ -1152,7 +1167,7 @@ export default function HaruFairyApp() {
       {modal === "manualTodo" && (
         <EditorModal
           kind="todo"
-          title="할 일 작성"
+          title="To-do 작성"
           manual
           onClose={(dirty) => requestCloseModal("manualTodo", dirty)}
           onSave={async (payload) => {
@@ -1325,7 +1340,7 @@ function HomeScreen({
     muted: boolean;
     today: boolean;
     selected: boolean;
-    hasSchedule: boolean;
+    scheduleColors: string[];
   }>;
   onChat: () => void;
   onCalendar: () => void;
@@ -1381,17 +1396,17 @@ function HomeScreen({
 
       <section className="todo-card">
         <button className="card-title-row" onClick={onTodos}>
-          <h2>오늘의 할 일</h2>
+          <h2>오늘의 To-do</h2>
           <span>{completedCount}/{todos.length} 완료</span>
         </button>
         <TodoList
           todos={todos}
           onToggle={onToggleTodo}
           onEdit={onEditTodo}
-          emptyText="등록된 할 일이 없습니다"
+          emptyText="등록된 To-do가 없습니다"
         />
         <button className="ghost-add-button" onClick={onAddTodo}>
-          + 할 일 추가
+          + To-do 추가
         </button>
       </section>
     </div>
@@ -1420,7 +1435,7 @@ function CalendarScreen({
     muted: boolean;
     today: boolean;
     selected: boolean;
-    hasSchedule: boolean;
+    scheduleColors: string[];
   }>;
   schedules: Schedule[];
   selectedDate: number;
@@ -1459,7 +1474,13 @@ function CalendarScreen({
               onClick={() => onSelectDate(cell.id)}
             >
               <span>{cell.day}</span>
-              {cell.hasSchedule && <CalendarDot />}
+              {cell.scheduleColors.length > 0 && (
+                <span className="calendar-dot-row">
+                  {cell.scheduleColors.slice(0, 3).map((color) => (
+                    <CalendarDot key={`${cell.id}-${color}`} color={color} />
+                  ))}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -1543,7 +1564,7 @@ function ChatScreen({
         </ResultCard>
 
         {summary.todos.length > 0 && (
-          <ResultCard title="할 일 정리" onEdit={onEditTodo}>
+          <ResultCard title="To-do 정리" onEdit={onEditTodo}>
             <ul className="readonly-todos">
               {summary.todos.map((todo) => (
                 <li key={todo}>
@@ -1565,7 +1586,7 @@ function ChatScreen({
               <strong>{schedule.title}</strong>
               <small>
                 {formatKoreanDate(schedule.date)}
-                {schedule.startTime ? ` ${schedule.startTime}` : " 종일"}
+                {formatScheduleTimeLabel(schedule.startTime, schedule.isAllDay)}
               </small>
               <p>
                 {schedule.accepted === false
@@ -1687,7 +1708,7 @@ function RecordsScreen({
           메모
         </button>
         <button className={mode === "todo" ? "active" : ""} onClick={() => onMode("todo")}>
-          할 일
+          To-do
         </button>
       </div>
 
@@ -1726,15 +1747,11 @@ function RecordsScreen({
               </div>
             ))
           )}
-          <button className="floating-plus" onClick={onMemoWrite} aria-label="메모 작성">
-            <Icon name="plus" />
-            <small>추가</small>
-          </button>
         </section>
       ) : (
-        <section className="todo-card record-todo">
+        <section className="record-todo">
           {todoGroups.length === 0 ? (
-            <EmptyState text="등록된 할 일이 없습니다" />
+            <EmptyState text="등록된 To-do가 없습니다" />
           ) : (
             todoGroups.map((group) => (
               <div key={group.date} className="record-date-group todo-date-box">
@@ -1749,17 +1766,21 @@ function RecordsScreen({
                   onToggle={onToggleTodo}
                   onEdit={onEditTodo}
                   onDelete={onDeleteTodo}
-                  emptyText="등록된 할 일이 없습니다"
+                  emptyText="등록된 To-do가 없습니다"
                 />
               </div>
             ))
           )}
-          <button className="floating-plus" onClick={onTodoWrite} aria-label="할 일 작성">
-            <Icon name="plus" />
-            <small>추가</small>
-          </button>
         </section>
       )}
+      <button
+        className="floating-plus"
+        onClick={mode === "memo" ? onMemoWrite : onTodoWrite}
+        aria-label={mode === "memo" ? "메모 작성" : "To-do 작성"}
+      >
+        <Icon name="plus" />
+        <small>추가</small>
+      </button>
     </div>
   );
 }
@@ -1802,8 +1823,18 @@ function MyScreen({
       return;
     }
 
-    if (password.trim().length < 4) {
-      setFormError("비밀번호는 4자리 이상 입력해 주세요.");
+    if (userId.trim().includes("@")) {
+      setFormError("이메일이 아니라 아이디만 입력해 주세요.");
+      return;
+    }
+
+    if (authMode === "signup" && !/^\d{4}$/.test(password.trim())) {
+      setFormError("비밀번호는 숫자 4자리로 입력해 주세요.");
+      return;
+    }
+
+    if (authMode === "login" && password.trim().length < 4) {
+      setFormError("비밀번호를 입력해 주세요.");
       return;
     }
 
@@ -1844,7 +1875,7 @@ function MyScreen({
           <p>
             {authMode === "login"
               ? "카카오 또는 아이디로 로그인할 수 있어요."
-              : "닉네임과 비밀번호로 계정을 만들어요."}
+              : "아이디·닉네임·숫자 4자리 비밀번호로 가입해요."}
           </p>
 
           <div className="auth-mode-tabs">
@@ -1864,20 +1895,26 @@ function MyScreen({
             </button>
           </div>
 
-          <form className="auth-form" onSubmit={handleSubmit}>
+          <form className="auth-form" onSubmit={handleSubmit} noValidate>
             <label className="auth-field">
               <span>아이디</span>
               <input
+                type="text"
+                inputMode="text"
                 value={userId}
                 onChange={(event) => setUserId(event.target.value)}
-                placeholder="사용할 아이디"
+                placeholder="사용할 아이디 (이메일 아님)"
                 autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
               />
             </label>
             {authMode === "signup" && (
               <label className="auth-field">
                 <span>닉네임</span>
                 <input
+                  type="text"
                   value={nickname}
                   onChange={(event) => setNickname(event.target.value)}
                   placeholder="사용할 닉네임"
@@ -1890,9 +1927,21 @@ function MyScreen({
               <div className="auth-password-row">
                 <input
                   type={showPassword ? "text" : "password"}
+                  inputMode={authMode === "signup" ? "numeric" : "text"}
+                  pattern={authMode === "signup" ? "[0-9]*" : undefined}
+                  maxLength={authMode === "signup" ? 4 : undefined}
                   value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="비밀번호 입력"
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setPassword(
+                      authMode === "signup"
+                        ? next.replace(/\D/g, "").slice(0, 4)
+                        : next,
+                    );
+                  }}
+                  placeholder={
+                    authMode === "signup" ? "숫자 4자리" : "비밀번호 입력"
+                  }
                   autoComplete={
                     authMode === "login" ? "current-password" : "new-password"
                   }
@@ -1904,7 +1953,9 @@ function MyScreen({
                   {showPassword ? "숨김" : "보기"}
                 </button>
               </div>
-              <small>숫자 4자리 이상 입력해주세요</small>
+              {authMode === "signup" && (
+                <small>숫자 4자리로 입력해 주세요</small>
+              )}
             </label>
             <button
               className="primary-action full"
@@ -1984,7 +2035,7 @@ function CalendarGrid({
     muted: boolean;
     today: boolean;
     selected: boolean;
-    hasSchedule: boolean;
+    scheduleColors: string[];
   }>;
   mini?: boolean;
 }) {
@@ -2001,7 +2052,13 @@ function CalendarGrid({
           ].join(" ")}
         >
           <span>{cell.day}</span>
-          {cell.hasSchedule && <CalendarDot />}
+          {cell.scheduleColors.length > 0 && (
+            <span className="calendar-dot-row">
+              {cell.scheduleColors.slice(0, 3).map((color) => (
+                <CalendarDot key={`${cell.id}-${color}`} color={color} />
+              ))}
+            </span>
+          )}
         </span>
       ))}
     </div>
@@ -2835,6 +2892,37 @@ function getErrorMessage(error: unknown) {
   }
 
   return "일시적인 오류가 발생했어요. 다시 시도해주세요.";
+}
+
+function getAuthErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  const lower = message.toLowerCase();
+
+  if (lower.includes("password") && (lower.includes("6") || lower.includes("least"))) {
+    return "비밀번호는 숫자 4자리로 입력해 주세요.";
+  }
+  if (
+    lower.includes("email") ||
+    lower.includes("invalid login") ||
+    lower.includes("invalid credentials")
+  ) {
+    return "아이디 또는 비밀번호를 확인해 주세요.";
+  }
+  if (lower.includes("already registered") || lower.includes("already been registered")) {
+    return "이미 사용 중인 아이디예요.";
+  }
+
+  return getErrorMessage(error);
+}
+
+function formatScheduleTimeLabel(
+  startTime: string | null | undefined,
+  isAllDay?: boolean,
+) {
+  if (isAllDay || !startTime || startTime.toLowerCase() === "null") {
+    return " 종일";
+  }
+  return ` ${startTime}`;
 }
 
 function getProfileFromSession(session: Session | null): AppProfile {

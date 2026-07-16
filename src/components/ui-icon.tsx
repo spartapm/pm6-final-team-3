@@ -227,15 +227,12 @@ export function ScheduleBar({ color }: { color: string }) {
   );
 }
 
-export function CalendarDot() {
+export function CalendarDot({ color = "#A864D4" }: { color?: string }) {
   return (
-    <Image
+    <span
       aria-hidden
       className="calendar-dot-asset"
-      src="/assets/calendar_screen_svg_assets/calendar_dot_purple.svg"
-      alt=""
-      width={8}
-      height={8}
+      style={{ backgroundColor: color }}
     />
   );
 }
