@@ -664,7 +664,7 @@ export default function HaruFairyApp() {
     });
 
     if (error) {
-      setAppError(getAuthErrorMessage(error));
+      setAppError(getAuthErrorMessage(error, "login"));
       throw error;
     }
   }
@@ -688,12 +688,18 @@ export default function HaruFairyApp() {
     });
 
     if (error) {
-      setAppError(getAuthErrorMessage(error));
+      setAppError(getAuthErrorMessage(error, "signup"));
       throw error;
     }
 
+    // 이미 가입된 아이디인데 메일 인증이 켜져 있으면, 에러 대신 빈 identities로 올 수 있음
+    if (data.user && (data.user.identities?.length ?? 0) === 0) {
+      setAppError("이미 사용 중인 아이디예요. 다른 아이디로 가입해 주세요.");
+      return;
+    }
+
     if (data.user && !data.session) {
-      setAppError("가입 메일을 확인한 뒤 로그인해 주세요.");
+      setAppError("가입은 되었지만 바로 로그인되지 않았어요. 로그인 탭에서 다시 시도해 주세요.");
       return;
     }
 
@@ -2894,25 +2900,56 @@ function getErrorMessage(error: unknown) {
   return "일시적인 오류가 발생했어요. 다시 시도해주세요.";
 }
 
-function getAuthErrorMessage(error: unknown) {
+function getAuthErrorMessage(
+  error: unknown,
+  mode: "login" | "signup" = "login",
+) {
   const message = error instanceof Error ? error.message : "";
   const lower = message.toLowerCase();
+
+  if (
+    lower.includes("already registered") ||
+    lower.includes("already been registered") ||
+    lower.includes("user already exists")
+  ) {
+    return "이미 사용 중인 아이디예요. 다른 아이디로 가입해 주세요.";
+  }
 
   if (lower.includes("password") && (lower.includes("6") || lower.includes("least"))) {
     return "비밀번호는 숫자 4자리로 입력해 주세요.";
   }
+
   if (
-    lower.includes("email") ||
-    lower.includes("invalid login") ||
-    lower.includes("invalid credentials")
+    lower.includes("invalid format") ||
+    lower.includes("unable to validate email") ||
+    (lower.includes("email address") && lower.includes("invalid"))
   ) {
-    return "아이디 또는 비밀번호를 확인해 주세요.";
-  }
-  if (lower.includes("already registered") || lower.includes("already been registered")) {
-    return "이미 사용 중인 아이디예요.";
+    return "사용할 수 없는 아이디예요. 영문·숫자 조합의 다른 아이디로 시도해 주세요.";
   }
 
-  return getErrorMessage(error);
+  if (lower.includes("rate limit") || lower.includes("too many requests")) {
+    return "요청이 너무 많아요. 잠시 후 다시 시도해 주세요.";
+  }
+
+  if (lower.includes("email not confirmed") || lower.includes("not confirmed")) {
+    return "아직 가입이 완료되지 않은 계정이에요. 잠시 후 다시 로그인해 주세요.";
+  }
+
+  if (
+    lower.includes("invalid login") ||
+    lower.includes("invalid credentials") ||
+    lower.includes("invalid email or password")
+  ) {
+    return mode === "signup"
+      ? "가입에 실패했어요. 아이디·닉네임·비밀번호를 다시 확인해 주세요."
+      : "아이디 또는 비밀번호가 맞지 않아요. 다시 확인해 주세요.";
+  }
+
+  if (mode === "signup") {
+    return "회원가입에 실패했어요. 입력 정보를 확인한 뒤 다시 시도해 주세요.";
+  }
+
+  return "로그인에 실패했어요. 아이디와 비밀번호를 확인해 주세요.";
 }
 
 function formatScheduleTimeLabel(
