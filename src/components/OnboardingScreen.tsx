@@ -110,6 +110,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
   return (
     <section className="onboarding-shell">
+      <div className="onboarding-glow" aria-hidden />
       <div className="onboarding-stars" aria-hidden />
 
       <header className="onboarding-top">
@@ -132,35 +133,31 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           }}
         >
           {SLIDES.map((item) => (
-            <article key={item.id} className="onboarding-slide">
+            <article
+              key={item.id}
+              className={`onboarding-slide${item.graphic ? "" : " centered"}`}
+            >
               <div className="onboarding-hero">
-                <div
-                  className={`onboarding-icon-frame${
-                    item.icon === "pencil" ? " pencil" : ""
-                  }`}
-                >
-                  {item.icon === "logo" ? (
-                    <Image
-                      src="/logo.png"
-                      alt=""
-                      width={72}
-                      height={72}
-                      className="onboarding-logo"
-                      priority
-                    />
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src="/assets/onboarding/pencil.svg"
-                      alt=""
-                      width={56}
-                      height={56}
-                      className="onboarding-pencil"
-                    />
-                  )}
-                </div>
+                {item.icon === "logo" ? (
+                  <Image
+                    src="/logo.png"
+                    alt=""
+                    width={88}
+                    height={88}
+                    className="onboarding-logo"
+                    priority
+                  />
+                ) : (
+                  <div className="onboarding-icon-frame pencil">
+                    <span className="onboarding-pencil-emoji" aria-hidden>
+                      ✏️
+                    </span>
+                  </div>
+                )}
 
-                {item.badge && <span className="onboarding-badge">{item.badge}</span>}
+                {item.badge ? (
+                  <span className="onboarding-badge">{item.badge}</span>
+                ) : null}
 
                 <h1>
                   {item.title.map((line) => (
@@ -174,8 +171,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 </p>
               </div>
 
-              {item.graphic === "chat" && <ChatPreview />}
-              {item.graphic === "summary" && <SummaryPreview />}
+              {item.graphic === "chat" ? <ChatPreview /> : null}
+              {item.graphic === "summary" ? <SummaryPreview /> : null}
             </article>
           ))}
         </div>
@@ -206,17 +203,29 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
 function ChatPreview() {
   return (
-    <div className="onboarding-preview chat-preview">
+    <div className="onboarding-preview chat-preview-card">
       <div className="preview-bubble user">
         오늘 밤에 운동 갔다가 내일 7시에 서울역에서 기차 타야 돼.
       </div>
-      <div className="preview-bubble ai">
-        고생 많았어요! 내일 일정을 이렇게 정리했어요 ✨
-      </div>
-      <div className="preview-schedule-card">
-        <span className="preview-schedule-icon" aria-hidden>
-          🚆
+
+      <div className="preview-ai-block">
+        <span className="preview-ai-avatar">
+          <Image src="/logo.png" alt="" width={28} height={28} />
         </span>
+        <div className="preview-bubble ai">
+          고생 많았어요! 내일 일정을 이렇게 정리했어요 ✨
+        </div>
+      </div>
+
+      <div className="preview-schedule-card">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/assets/onboarding/train.svg"
+          alt=""
+          width={36}
+          height={36}
+          className="preview-schedule-icon"
+        />
         <div>
           <strong>서울역 기차 탑승</strong>
           <small>내일 오전 7:00 · 서울역</small>
@@ -231,10 +240,13 @@ function SummaryPreview() {
     <div className="onboarding-preview summary-preview">
       <div className="preview-memo-card">
         <div className="preview-memo-title">
-          <span aria-hidden>🫠</span>
+          <span aria-hidden>😌</span>
           <strong>바쁘지만 알찬 하루</strong>
         </div>
-        <p>오전엔 면접 준비로 분주했지만, 차분히 해냈다. 오후엔...</p>
+        <p>
+          오전엔 면접 준비로 분주했지만 차분히 해냈다. 오후엔 카페에서 한숨
+          돌렸다.
+        </p>
       </div>
 
       <div className="preview-split">
@@ -254,8 +266,10 @@ function SummaryPreview() {
         <div className="preview-event-card">
           <h3>일정</h3>
           <div className="preview-event-row">
-            <span aria-hidden>🦷</span>
-            <div>
+            <span className="preview-event-emoji" aria-hidden>
+              🦷
+            </span>
+            <div className="preview-event-copy">
               <strong>치과 예약</strong>
               <small>6/30 오후 3:00</small>
             </div>

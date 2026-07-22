@@ -1992,16 +1992,21 @@ button.calendar-cell {
   position: relative;
   display: flex;
   width: 100%;
-  max-width: 560px;
+  max-width: 430px;
   min-height: 100svh;
   margin: 0 auto;
   flex-direction: column;
   overflow: hidden;
+  background: linear-gradient(180deg, #1a1630 0%, #12101f 38%, #0c0a16 100%);
+}
+
+.onboarding-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
   background:
-    radial-gradient(ellipse 80% 50% at 50% 28%, rgba(120, 96, 255, 0.28), transparent 58%),
-    radial-gradient(circle at 18% 12%, rgba(170, 161, 255, 0.18), transparent 18rem),
-    radial-gradient(circle at 82% 18%, rgba(255, 209, 149, 0.08), transparent 14rem),
-    linear-gradient(180deg, #12101f 0%, #0d0b18 48%, #090814 100%);
+    radial-gradient(ellipse 70% 42% at 50% 22%, rgba(128, 104, 255, 0.34), transparent 70%),
+    radial-gradient(circle at 50% 48%, rgba(96, 78, 210, 0.12), transparent 55%);
 }
 
 .onboarding-stars {
@@ -2009,22 +2014,17 @@ button.calendar-cell {
   inset: 0;
   pointer-events: none;
   background-image:
-    radial-gradient(1.5px 1.5px at 12% 18%, rgba(255, 255, 255, 0.7), transparent),
-    radial-gradient(1.5px 1.5px at 28% 8%, rgba(190, 176, 255, 0.85), transparent),
-    radial-gradient(1px 1px at 42% 22%, rgba(255, 255, 255, 0.55), transparent),
-    radial-gradient(1.5px 1.5px at 58% 14%, rgba(210, 200, 255, 0.75), transparent),
-    radial-gradient(1px 1px at 72% 10%, rgba(255, 255, 255, 0.5), transparent),
-    radial-gradient(1.5px 1.5px at 86% 20%, rgba(175, 166, 255, 0.8), transparent),
-    radial-gradient(1px 1px at 18% 36%, rgba(255, 255, 255, 0.4), transparent),
-    radial-gradient(1.5px 1.5px at 34% 44%, rgba(190, 176, 255, 0.55), transparent),
-    radial-gradient(1px 1px at 66% 38%, rgba(255, 255, 255, 0.45), transparent),
-    radial-gradient(1.5px 1.5px at 88% 42%, rgba(210, 200, 255, 0.5), transparent),
-    radial-gradient(1px 1px at 8% 58%, rgba(255, 255, 255, 0.35), transparent),
-    radial-gradient(1px 1px at 48% 62%, rgba(175, 166, 255, 0.4), transparent),
-    radial-gradient(1.5px 1.5px at 78% 68%, rgba(255, 255, 255, 0.35), transparent),
-    radial-gradient(1px 1px at 22% 78%, rgba(190, 176, 255, 0.35), transparent),
-    radial-gradient(1px 1px at 62% 82%, rgba(255, 255, 255, 0.3), transparent);
-  opacity: 0.9;
+    radial-gradient(1.2px 1.2px at 10% 12%, rgba(255, 255, 255, 0.65), transparent),
+    radial-gradient(1.2px 1.2px at 22% 8%, rgba(190, 176, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 38% 16%, rgba(255, 255, 255, 0.45), transparent),
+    radial-gradient(1.2px 1.2px at 54% 10%, rgba(210, 200, 255, 0.65), transparent),
+    radial-gradient(1px 1px at 70% 14%, rgba(255, 255, 255, 0.4), transparent),
+    radial-gradient(1.2px 1.2px at 86% 9%, rgba(175, 166, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 16% 28%, rgba(255, 255, 255, 0.35), transparent),
+    radial-gradient(1px 1px at 48% 30%, rgba(190, 176, 255, 0.4), transparent),
+    radial-gradient(1.2px 1.2px at 78% 26%, rgba(255, 255, 255, 0.35), transparent),
+    radial-gradient(1px 1px at 92% 34%, rgba(210, 200, 255, 0.35), transparent);
+  opacity: 0.85;
 }
 
 .onboarding-top {
@@ -2032,15 +2032,15 @@ button.calendar-cell {
   z-index: 2;
   display: flex;
   justify-content: flex-end;
-  padding: 54px 28px 8px;
+  padding: 52px 24px 4px;
 }
 
 .onboarding-skip {
   background: transparent;
-  color: rgba(214, 208, 240, 0.72);
-  font-size: 15px;
+  color: rgba(196, 190, 220, 0.78);
+  font-size: 14px;
   line-height: 1.2;
-  font-weight: 700;
+  font-weight: 650;
   letter-spacing: -0.02em;
 }
 
@@ -2070,16 +2070,16 @@ button.calendar-cell {
   width: 100%;
   flex: 0 0 100%;
   flex-direction: column;
-  padding: 12px 28px 0;
+  padding: 8px 24px 0;
 }
 
-.onboarding-slide:last-child {
+.onboarding-slide.centered {
   justify-content: center;
-  padding-bottom: 40px;
+  padding-bottom: 36px;
 }
 
-.onboarding-slide:last-child .onboarding-hero {
-  margin-top: -48px;
+.onboarding-slide.centered .onboarding-hero {
+  margin-top: -56px;
 }
 
 .onboarding-hero {
@@ -2088,67 +2088,63 @@ button.calendar-cell {
   text-align: center;
 }
 
+.onboarding-logo {
+  display: block;
+  width: 88px;
+  height: 88px;
+  margin-bottom: 16px;
+  border-radius: 22px;
+  object-fit: cover;
+  filter: drop-shadow(0 0 22px rgba(150, 128, 255, 0.55));
+}
+
 .onboarding-icon-frame {
   display: grid;
   width: 88px;
   height: 88px;
   place-items: center;
-  margin-bottom: 18px;
-  border: 1px solid rgba(180, 166, 255, 0.28);
-  border-radius: 26px;
-  background:
-    radial-gradient(circle at 50% 40%, rgba(170, 161, 255, 0.28), transparent 68%),
-    rgba(28, 24, 52, 0.92);
+  margin-bottom: 16px;
+  overflow: hidden;
+  border-radius: 24px;
+  background: linear-gradient(180deg, #2a2448 0%, #1d1834 100%);
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
-    0 0 36px rgba(140, 120, 255, 0.45),
-    0 18px 40px rgba(0, 0, 0, 0.35);
+    0 0 0 1px rgba(180, 166, 255, 0.16),
+    0 0 34px rgba(255, 210, 120, 0.22),
+    0 10px 28px rgba(0, 0, 0, 0.35);
 }
 
-.onboarding-icon-frame.pencil {
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
-    0 0 32px rgba(246, 193, 91, 0.28),
-    0 18px 40px rgba(0, 0, 0, 0.35);
-}
-
-.onboarding-logo {
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
-  object-fit: cover;
-  filter: drop-shadow(0 0 14px rgba(175, 166, 255, 0.75));
-}
-
-.onboarding-pencil {
-  width: 52px;
-  height: 52px;
+.onboarding-pencil-emoji {
+  font-size: 40px;
+  line-height: 1;
+  transform: rotate(-28deg);
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.35));
 }
 
 .onboarding-badge {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  margin-bottom: 14px;
+  min-height: 26px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(180, 166, 255, 0.16);
   border-radius: 999px;
-  background: rgba(145, 128, 255, 0.28);
-  color: #d8d0ff;
-  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d4ccff;
+  padding: 0 11px;
   font-size: 12px;
   line-height: 1;
-  font-weight: 800;
+  font-weight: 750;
   letter-spacing: -0.02em;
 }
 
 .onboarding-hero h1 {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   margin: 0;
-  color: #f7f3ff;
-  font-size: 28px;
-  line-height: 1.28;
+  color: #ffffff;
+  font-size: 26px;
+  line-height: 1.32;
   font-weight: 900;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.04em;
 }
 
 .onboarding-hero h1 span,
@@ -2158,81 +2154,105 @@ button.calendar-cell {
 
 .onboarding-hero p {
   display: grid;
-  gap: 2px;
-  margin: 14px 0 0;
-  color: rgba(188, 180, 220, 0.92);
-  font-size: 15px;
+  gap: 1px;
+  margin: 12px 0 0;
+  color: rgba(176, 168, 204, 0.95);
+  font-size: 14px;
   line-height: 1.55;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.02em;
 }
 
 .onboarding-preview {
   width: 100%;
-  margin-top: 28px;
+  margin-top: 22px;
 }
 
-.chat-preview {
+.chat-preview-card {
   display: grid;
-  gap: 12px;
-  justify-items: stretch;
+  gap: 10px;
+  border: 1px solid rgba(180, 166, 255, 0.16);
+  border-radius: 22px;
+  background: rgba(48, 40, 84, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 16px 36px rgba(0, 0, 0, 0.22);
+  padding: 16px 14px;
 }
 
 .preview-bubble {
-  max-width: 92%;
-  border-radius: 18px;
-  padding: 14px 16px;
-  font-size: 14px;
+  border-radius: 16px;
+  padding: 12px 14px;
+  font-size: 13px;
   line-height: 1.45;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
 
 .preview-bubble.user {
+  max-width: 92%;
   justify-self: end;
   border-bottom-right-radius: 6px;
-  background: var(--primary);
-  color: #241e4d;
-  box-shadow: 0 10px 24px rgba(170, 161, 255, 0.28);
+  background: #a89cff;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(140, 120, 255, 0.28);
+}
+
+.preview-ai-block {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.preview-ai-avatar {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border-radius: 9px;
+  background: #2a2448;
+  box-shadow: 0 0 12px rgba(150, 130, 255, 0.45);
+}
+
+.preview-ai-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .preview-bubble.ai {
-  justify-self: start;
   border-bottom-left-radius: 6px;
-  border: 1px solid rgba(180, 166, 255, 0.18);
-  background: rgba(48, 42, 84, 0.92);
-  color: #efeaff;
+  border: 1px solid rgba(180, 166, 255, 0.14);
+  background: rgba(58, 50, 96, 0.95);
+  color: #f2edff;
 }
 
 .preview-schedule-card {
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 12px;
-  max-width: 92%;
-  justify-self: start;
-  border: 1px solid rgba(180, 166, 255, 0.2);
-  border-radius: 18px;
-  background: rgba(40, 34, 72, 0.92);
-  padding: 14px 16px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  gap: 10px;
+  margin-left: 36px;
+  border: 1px solid rgba(180, 166, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(36, 30, 66, 0.95);
+  padding: 12px;
 }
 
 .preview-schedule-icon {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-  font-size: 20px;
+  display: block;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
 }
 
 .preview-schedule-card strong,
 .preview-event-row strong,
 .preview-memo-title strong {
   display: block;
-  font-size: 14px;
+  color: #ffffff;
+  font-size: 13px;
   line-height: 1.3;
   font-weight: 850;
   letter-spacing: -0.02em;
@@ -2241,69 +2261,82 @@ button.calendar-cell {
 .preview-schedule-card small,
 .preview-event-row small {
   display: block;
-  margin-top: 4px;
-  color: #a8a0c5;
-  font-size: 12px;
+  margin-top: 3px;
+  color: #a39bbb;
+  font-size: 11px;
   line-height: 1.3;
   font-weight: 650;
 }
 
 .summary-preview {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .preview-memo-card,
 .preview-todo-card,
 .preview-event-card {
-  border: 1px solid rgba(180, 166, 255, 0.2);
+  border: 1px solid rgba(180, 166, 255, 0.14);
   border-radius: 18px;
-  background: rgba(42, 36, 76, 0.9);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  padding: 14px 16px;
+  background: rgba(48, 40, 84, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 14px;
+}
+
+.preview-memo-card {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 28px rgba(120, 100, 255, 0.12);
 }
 
 .preview-memo-title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .preview-memo-title span {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .preview-memo-card p {
   display: -webkit-box;
   overflow: hidden;
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-  color: #bcb5d8;
-  font-size: 13px;
+  color: #b7afd4;
+  font-size: 12px;
   line-height: 1.45;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .preview-split {
   display: grid;
-  grid-template-columns: 1.15fr 0.95fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  align-items: stretch;
+}
+
+.preview-todo-card,
+.preview-event-card {
+  min-width: 0;
+  height: 100%;
 }
 
 .preview-todo-card h3,
 .preview-event-card h3 {
   margin: 0 0 10px;
-  color: #d8d0ff;
-  font-size: 12px;
+  color: #ffffff;
+  font-size: 13px;
   line-height: 1.2;
-  font-weight: 800;
+  font-weight: 850;
   letter-spacing: -0.02em;
 }
 
 .preview-todo-card ul {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -2313,82 +2346,99 @@ button.calendar-cell {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #efeaff;
-  font-size: 13px;
+  color: #f0ebff;
+  font-size: 12px;
   line-height: 1.3;
   font-weight: 700;
 }
 
 .preview-check {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   flex: 0 0 auto;
-  border: 1.5px solid rgba(180, 166, 255, 0.55);
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.04);
+  border: 1.5px solid rgba(190, 178, 255, 0.55);
+  border-radius: 4px;
+  background: transparent;
 }
 
 .preview-event-row {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
+  display: flex;
+  align-items: flex-start;
   gap: 8px;
 }
 
-.preview-event-row > span {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
-  font-size: 16px;
+.preview-event-emoji {
+  display: block;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.preview-event-copy {
+  min-width: 0;
+  padding-top: 1px;
+}
+
+.preview-event-copy strong {
+  display: block;
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.3;
+  font-weight: 850;
+  letter-spacing: -0.02em;
+}
+
+.preview-event-copy small {
+  display: block;
+  margin-top: 4px;
+  color: #a39bbb;
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 650;
 }
 
 .onboarding-footer {
   position: relative;
   z-index: 2;
   display: grid;
-  gap: 18px;
-  padding: 18px 28px calc(28px + env(safe-area-inset-bottom));
+  gap: 16px;
+  padding: 14px 24px calc(26px + env(safe-area-inset-bottom));
 }
 
 .onboarding-dots {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 7px;
 }
 
 .onboarding-dots button {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 999px;
-  background: rgba(180, 166, 255, 0.28);
-  transition: background 0.22s ease, transform 0.22s ease, box-shadow 0.22s ease;
+  background: rgba(160, 148, 210, 0.35);
+  transition: width 0.22s ease, background 0.22s ease;
 }
 
 .onboarding-dots button.active {
-  background: #cfc6ff;
-  transform: scale(1.15);
-  box-shadow: 0 0 12px rgba(170, 161, 255, 0.55);
+  width: 20px;
+  background: #c8bcff;
 }
 
 .onboarding-cta {
   display: grid;
   width: 100%;
-  min-height: 56px;
+  min-height: 54px;
   place-items: center;
   border-radius: 999px;
-  background: linear-gradient(180deg, #b7aeff 0%, #a396ff 100%);
+  background: #b1a4ff;
   color: #241e4d;
   font-size: 16px;
   line-height: 1.2;
   font-weight: 900;
   letter-spacing: -0.03em;
-  box-shadow:
-    0 12px 28px rgba(140, 120, 255, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: 0 10px 24px rgba(130, 110, 240, 0.28);
 }
 
 @media (max-width: 480px) {
