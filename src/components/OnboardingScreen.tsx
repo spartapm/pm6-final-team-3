@@ -212,23 +212,24 @@ function ChatPreview() {
         <span className="preview-ai-avatar">
           <Image src="/logo.png" alt="" width={28} height={28} />
         </span>
-        <div className="preview-bubble ai">
-          고생 많았어요! 내일 일정을 이렇게 정리했어요 ✨
-        </div>
-      </div>
-
-      <div className="preview-schedule-card">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/assets/onboarding/train.svg"
-          alt=""
-          width={36}
-          height={36}
-          className="preview-schedule-icon"
-        />
-        <div>
-          <strong>서울역 기차 탑승</strong>
-          <small>내일 오전 7:00 · 서울역</small>
+        <div className="preview-ai-stack">
+          <div className="preview-bubble ai">
+            고생 많았어요! 내일 일정을 이렇게 정리했어요 ✨
+          </div>
+          <div className="preview-schedule-card">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/assets/onboarding/train.svg"
+              alt=""
+              width={40}
+              height={40}
+              className="preview-schedule-icon"
+            />
+            <div className="preview-schedule-copy">
+              <strong>서울역 기차 탑승</strong>
+              <small>내일 오전 7:00 · 서울역</small>
+            </div>
+          </div>
         </div>
       </div>
     </div>
