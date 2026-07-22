@@ -24,6 +24,7 @@ import {
   updateTodo,
   updateTodoCompleted,
   upsertProfile,
+  type AppChatSummary,
   type AppMemo,
   type AppProfile,
   type AppSchedule,
@@ -36,6 +37,7 @@ import {
 } from "@/lib/analytics";
 import {
   GUEST_USER_ID,
+  guestCreateChatSummary,
   guestCreateMemo,
   guestCreateSchedule,
   guestCreateTodo,
@@ -56,10 +58,12 @@ import {
   scheduleColorChips,
   type IconName,
 } from "@/components/ui-icon";
+import { OnboardingScreen } from "@/components/OnboardingScreen";
 import { supabase } from "@/lib/supabase/client";
 
 type Tab = "home" | "calendar" | "chat" | "records" | "my";
-type RecordMode = "memo" | "todo";
+type RecordMode = "memo" | "todo" | "chat";
+type ChatSummary = AppChatSummary;
 type ModalType =
   | "scheduleCreate"
   | "scheduleEdit"
@@ -126,6 +130,7 @@ type EditorSavePayload =
 const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
 const today = getTodayInfo();
 const TAB_STORAGE_KEY = "haru-active-tab";
+const ONBOARDING_STORAGE_KEY = "haru-onboarding-done";
 
 function readStoredTab(): Tab {
   if (typeof window === "undefined") {
@@ -173,6 +178,7 @@ export default function HaruFairyApp() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [memos, setMemos] = useState<Memo[]>([]);
+  const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [messageDraft, setMessageDraft] = useState("");
   const [summary, setSummary] = useState<AiSummary | null>(null);
@@ -191,6 +197,7 @@ export default function HaruFairyApp() {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [appError, setAppError] = useState<string | null>(null);
   const [hasHydratedTab, setHasHydratedTab] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
 
   const monthDays = useMemo(
     () => buildMonthDays(viewYear, viewMonthIndex),
@@ -215,7 +222,13 @@ export default function HaruFairyApp() {
     setActiveTab("home");
     window.localStorage.setItem(TAB_STORAGE_KEY, "home");
     setHasHydratedTab(true);
+    setShowOnboarding(!window.localStorage.getItem(ONBOARDING_STORAGE_KEY));
   }, []);
+
+  function completeOnboarding() {
+    window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "1");
+    setShowOnboarding(false);
+  }
 
   useEffect(() => {
     if (!hasHydratedTab) {
@@ -277,6 +290,7 @@ export default function HaruFairyApp() {
       setMemos(guest.memos);
       setTodos(guest.todos);
       setSchedules(guest.schedules);
+      setChatSummaries(guest.chatSummaries);
       setIsLoadingData(false);
       window.localStorage.removeItem("haru-has-session");
       window.localStorage.setItem(TAB_STORAGE_KEY, "home");
@@ -307,6 +321,7 @@ export default function HaruFairyApp() {
       setMemos(data.memos);
       setTodos(data.todos);
       setSchedules(data.schedules);
+      setChatSummaries(data.chatSummaries);
 
       if (options.shouldGoHome) {
         setActiveTab("home");
@@ -530,11 +545,18 @@ export default function HaruFairyApp() {
             color: schedule.color,
           }),
         );
+        const chatSummary = guestCreateChatSummary({
+          conversation: messages,
+          memoTitle: summary.memo.title,
+          memoBody: summary.memo.body,
+          todos: summary.todos,
+        });
         setMemos((current) => [memo, ...current]);
         setTodos((current) => [...createdTodos, ...current]);
         if (createdSchedules.length > 0) {
           setSchedules((current) => [...createdSchedules, ...current]);
         }
+        setChatSummaries((current) => [chatSummary, ...current]);
         trackEvent("succeed_to_chat");
         setModal("saved");
         return;
@@ -574,7 +596,7 @@ export default function HaruFairyApp() {
         ),
       ]);
 
-      await createChatSummary({
+      const chatSummary = await createChatSummary({
         userId,
         conversation: messages,
         memoTitle: summary.memo.title,
@@ -588,6 +610,7 @@ export default function HaruFairyApp() {
       if (createdSchedules.length > 0) {
         setSchedules((current) => [...createdSchedules, ...current]);
       }
+      setChatSummaries((current) => [chatSummary, ...current]);
       trackEvent("succeed_to_chat");
       setModal("saved");
     } catch (error) {
@@ -720,6 +743,18 @@ export default function HaruFairyApp() {
     window.localStorage.setItem(TAB_STORAGE_KEY, "home");
   }
 
+  if (showOnboarding === null) {
+    return <main />;
+  }
+
+  if (showOnboarding) {
+    return (
+      <main>
+        <OnboardingScreen onComplete={completeOnboarding} />
+      </main>
+    );
+  }
+
   return (
     <main>
       <section className="screen-shell">
@@ -831,6 +866,7 @@ export default function HaruFairyApp() {
               mode={recordMode}
               memos={memos}
               todos={todos}
+              chatSummaries={chatSummaries}
               onMode={setRecordMode}
               onToggleTodo={toggleTodo}
               onMemoWrite={() => {
@@ -1679,6 +1715,7 @@ function RecordsScreen({
   mode,
   memos,
   todos,
+  chatSummaries,
   onMode,
   onToggleTodo,
   onMemoWrite,
@@ -1691,6 +1728,7 @@ function RecordsScreen({
   mode: RecordMode;
   memos: Memo[];
   todos: Todo[];
+  chatSummaries: ChatSummary[];
   onMode: (mode: RecordMode) => void;
   onToggleTodo: (id: string) => void;
   onMemoWrite: () => void;
@@ -1700,8 +1738,42 @@ function RecordsScreen({
   onEditTodo: (todo: Todo) => void;
   onDeleteTodo: (todoId: string) => void;
 }) {
+  const [selectedChat, setSelectedChat] = useState<ChatSummary | null>(null);
   const memoGroups = groupMemosByDate(memos);
   const todoGroups = groupTodosByDate(todos);
+  const chatGroups = groupChatSummariesByDate(chatSummaries);
+
+  if (selectedChat) {
+    return (
+      <div className="page-stack chat-history-detail">
+        <header className="page-header">
+          <button
+            type="button"
+            className="back-button"
+            onClick={() => setSelectedChat(null)}
+            aria-label="뒤로가기"
+          >
+            <Icon name="chevron-left" />
+          </button>
+          <h1>{formatKoreanDate(toDateKeyFromIso(selectedChat.createdAt))}</h1>
+          <p>AI와 나눈 대화</p>
+        </header>
+
+        <section className="message-list chat-history-messages">
+          {selectedChat.conversation.map((message) => (
+            <div key={message.id} className={`message-row ${message.from}`}>
+              {message.from === "ai" && (
+                <span className="ai-avatar">
+                  <LogoMark compact />
+                </span>
+              )}
+              <p>{message.text}</p>
+            </div>
+          ))}
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="page-stack">
@@ -1709,12 +1781,15 @@ function RecordsScreen({
         <h1>기록</h1>
       </header>
 
-      <div className="segmented-control">
+      <div className="segmented-control records-tabs">
+        <button className={mode === "todo" ? "active" : ""} onClick={() => onMode("todo")}>
+          할 일
+        </button>
         <button className={mode === "memo" ? "active" : ""} onClick={() => onMode("memo")}>
           메모
         </button>
-        <button className={mode === "todo" ? "active" : ""} onClick={() => onMode("todo")}>
-          To-do
+        <button className={mode === "chat" ? "active" : ""} onClick={() => onMode("chat")}>
+          AI대화
         </button>
       </div>
 
@@ -1754,7 +1829,7 @@ function RecordsScreen({
             ))
           )}
         </section>
-      ) : (
+      ) : mode === "todo" ? (
         <section className="record-todo">
           {todoGroups.length === 0 ? (
             <EmptyState text="등록된 To-do가 없습니다" />
@@ -1778,15 +1853,48 @@ function RecordsScreen({
             ))
           )}
         </section>
+      ) : (
+        <section className="record-list">
+          {chatGroups.length === 0 ? (
+            <EmptyState text="저장된 AI 대화가 없습니다" />
+          ) : (
+            chatGroups.map((group) => (
+              <div key={group.date} className="record-date-group">
+                <p className="date-heading">{formatKoreanDate(group.date)}</p>
+                {group.items.map((chat) => (
+                  <button
+                    key={chat.id}
+                    type="button"
+                    className="chat-summary-card"
+                    onClick={() => setSelectedChat(chat)}
+                  >
+                    <span className="chat-summary-emoji" aria-hidden>
+                      {moodEmojiForId(chat.id)}
+                    </span>
+                    <span className="chat-summary-body">
+                      <strong>{formatKoreanMonthDay(group.date)}</strong>
+                      <p>{getChatSummaryPreview(chat)}</p>
+                    </span>
+                    <time className="chat-summary-time">
+                      {formatKoreanClock(chat.createdAt)}
+                    </time>
+                  </button>
+                ))}
+              </div>
+            ))
+          )}
+        </section>
       )}
-      <button
-        className="floating-plus"
-        onClick={mode === "memo" ? onMemoWrite : onTodoWrite}
-        aria-label={mode === "memo" ? "메모 작성" : "To-do 작성"}
-      >
-        <Icon name="plus" />
-        <small>추가</small>
-      </button>
+      {mode !== "chat" && (
+        <button
+          className="floating-plus"
+          onClick={mode === "memo" ? onMemoWrite : onTodoWrite}
+          aria-label={mode === "memo" ? "메모 작성" : "To-do 작성"}
+        >
+          <Icon name="plus" />
+          <small>추가</small>
+        </button>
+      )}
     </div>
   );
 }
@@ -2884,6 +2992,87 @@ function groupTodosByDate(todos: Todo[]) {
 
     return [...groups, { date: todo.date, items: [todo] }];
   }, []);
+}
+
+function groupChatSummariesByDate(chats: ChatSummary[]) {
+  return chats.reduce<Array<{ date: string; items: ChatSummary[] }>>(
+    (groups, chat) => {
+      const date = toDateKeyFromIso(chat.createdAt);
+      const group = groups.find((item) => item.date === date);
+      if (group) {
+        group.items.push(chat);
+        return groups;
+      }
+
+      return [...groups, { date, items: [chat] }];
+    },
+    [],
+  );
+}
+
+function toDateKeyFromIso(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return today.dateKey;
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatKoreanMonthDay(date: string) {
+  const separator = date.includes(".") ? "." : "-";
+  const [, month, day] = date.split(separator);
+  return `${Number(month)}월 ${Number(day)}일`;
+}
+
+function formatKoreanClock(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const period = hours < 12 ? "오전" : "오후";
+  const hour12 = hours % 12 || 12;
+  return `${period} ${hour12}:${minutes}`;
+}
+
+function getChatSummaryPreview(chat: ChatSummary) {
+  const title = chat.memoTitle.trim();
+  if (title) {
+    return title.length > 28 ? `${title.slice(0, 28)}...` : title;
+  }
+
+  const body = chat.memoBody.trim().replace(/\s+/g, " ");
+  if (body) {
+    return body.length > 28 ? `${body.slice(0, 28)}...` : body;
+  }
+
+  const userText = chat.conversation
+    .filter((message) => message.from === "user")
+    .map((message) => message.text.trim())
+    .filter(Boolean)
+    .join(", ");
+
+  if (userText) {
+    return userText.length > 28 ? `${userText.slice(0, 28)}...` : userText;
+  }
+
+  return "AI와 나눈 대화";
+}
+
+const CHAT_MOOD_EMOJIS = ["😌", "😊", "🤯", "🙂", "🥺", "😎", "💭", "✨"];
+
+function moodEmojiForId(id: string) {
+  let hash = 0;
+  for (let index = 0; index < id.length; index += 1) {
+    hash = (hash + id.charCodeAt(index) * (index + 1)) % CHAT_MOOD_EMOJIS.length;
+  }
+  return CHAT_MOOD_EMOJIS[hash];
 }
 
 function formatKoreanDate(date: string) {

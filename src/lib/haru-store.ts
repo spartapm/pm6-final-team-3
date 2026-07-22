@@ -28,11 +28,27 @@ export type AppSchedule = {
   isAllDay: boolean;
 };
 
+export type AppChatMessage = {
+  id: number;
+  from: "user" | "ai";
+  text: string;
+};
+
+export type AppChatSummary = {
+  id: string;
+  createdAt: string;
+  conversation: AppChatMessage[];
+  memoTitle: string;
+  memoBody: string;
+  todos: string[];
+};
+
 export type AppData = {
   profile: AppProfile | null;
   memos: AppMemo[];
   todos: AppTodo[];
   schedules: AppSchedule[];
+  chatSummaries: AppChatSummary[];
 };
 
 export async function upsertProfile(input: {
@@ -77,9 +93,23 @@ type ScheduleRow = {
   color: string;
 };
 
+type ChatSummaryRow = {
+  id: string;
+  conversation: unknown;
+  memo_title: string | null;
+  memo_body: string | null;
+  todos: unknown;
+  created_at: string;
+};
+
 export async function loadAppData(userId: string): Promise<AppData> {
-  const [profileResult, memosResult, todosResult, schedulesResult] =
-    await Promise.all([
+  const [
+    profileResult,
+    memosResult,
+    todosResult,
+    schedulesResult,
+    chatSummariesResult,
+  ] = await Promise.all([
       supabase
         .from("profiles")
         .select("nickname, avatar_url")
@@ -103,6 +133,11 @@ export async function loadAppData(userId: string): Promise<AppData> {
         .eq("user_id", userId)
         .order("schedule_date", { ascending: true })
         .order("start_time", { ascending: true, nullsFirst: false }),
+      supabase
+        .from("chat_summaries")
+        .select("id, conversation, memo_title, memo_body, todos, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false }),
     ]);
 
   if (profileResult.error) {
@@ -116,6 +151,9 @@ export async function loadAppData(userId: string): Promise<AppData> {
   }
   if (schedulesResult.error) {
     throw schedulesResult.error;
+  }
+  if (chatSummariesResult.error) {
+    throw chatSummariesResult.error;
   }
 
   return {
@@ -148,6 +186,9 @@ export async function loadAppData(userId: string): Promise<AppData> {
         color: schedule.color,
         isAllDay: schedule.is_all_day,
       }),
+    ),
+    chatSummaries: ((chatSummariesResult.data ?? []) as ChatSummaryRow[]).map(
+      mapChatSummaryRow,
     ),
   };
 }
@@ -396,19 +437,78 @@ export async function createChatSummary(input: {
   memoBody: string;
   todos: string[];
   scheduleSuggestions: unknown[];
-}) {
-  const { error } = await supabase.from("chat_summaries").insert({
-    user_id: input.userId,
-    conversation: input.conversation,
-    memo_title: input.memoTitle,
-    memo_body: input.memoBody,
-    todos: input.todos,
-    schedule_suggestions: input.scheduleSuggestions,
-  });
+}): Promise<AppChatSummary> {
+  const { data, error } = await supabase
+    .from("chat_summaries")
+    .insert({
+      user_id: input.userId,
+      conversation: input.conversation,
+      memo_title: input.memoTitle,
+      memo_body: input.memoBody,
+      todos: input.todos,
+      schedule_suggestions: input.scheduleSuggestions,
+    })
+    .select("id, conversation, memo_title, memo_body, todos, created_at")
+    .single();
 
   if (error) {
     throw error;
   }
+
+  return mapChatSummaryRow(data as ChatSummaryRow);
+}
+
+function mapChatSummaryRow(row: ChatSummaryRow): AppChatSummary {
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    conversation: normalizeConversation(row.conversation),
+    memoTitle: row.memo_title ?? "",
+    memoBody: row.memo_body ?? "",
+    todos: Array.isArray(row.todos)
+      ? row.todos.filter((item): item is string => typeof item === "string")
+      : [],
+  };
+}
+
+function normalizeConversation(value: unknown): AppChatMessage[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item, index) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+
+    const message = item as Record<string, unknown>;
+    const from =
+      message.from === "user" || message.from === "ai"
+        ? message.from
+        : message.role === "user"
+          ? "user"
+          : message.role === "assistant"
+            ? "ai"
+            : null;
+    const text =
+      typeof message.text === "string"
+        ? message.text
+        : typeof message.content === "string"
+          ? message.content
+          : "";
+
+    if (!from || !text.trim()) {
+      return [];
+    }
+
+    return [
+      {
+        id: typeof message.id === "number" ? message.id : index + 1,
+        from,
+        text,
+      },
+    ];
+  });
 }
 
 function formatTime(value: string) {

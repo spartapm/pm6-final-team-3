@@ -1,4 +1,10 @@
-import type { AppMemo, AppSchedule, AppTodo } from "@/lib/haru-store";
+import type {
+  AppChatMessage,
+  AppChatSummary,
+  AppMemo,
+  AppSchedule,
+  AppTodo,
+} from "@/lib/haru-store";
 
 export const GUEST_USER_ID = "guest-local";
 const GUEST_STORAGE_KEY = "haru-guest-data-v1";
@@ -7,10 +13,11 @@ export type GuestData = {
   memos: AppMemo[];
   todos: AppTodo[];
   schedules: AppSchedule[];
+  chatSummaries: AppChatSummary[];
 };
 
 function emptyGuestData(): GuestData {
-  return { memos: [], todos: [], schedules: [] };
+  return { memos: [], todos: [], schedules: [], chatSummaries: [] };
 }
 
 export function isGuestUser(userId: string | null | undefined) {
@@ -32,6 +39,9 @@ export function loadGuestData(): GuestData {
       memos: Array.isArray(parsed.memos) ? parsed.memos : [],
       todos: Array.isArray(parsed.todos) ? parsed.todos : [],
       schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
+      chatSummaries: Array.isArray(parsed.chatSummaries)
+        ? parsed.chatSummaries
+        : [],
     };
   } catch {
     return emptyGuestData();
@@ -185,4 +195,24 @@ export function guestDeleteSchedule(id: string) {
   const data = loadGuestData();
   data.schedules = data.schedules.filter((schedule) => schedule.id !== id);
   saveGuestData(data);
+}
+
+export function guestCreateChatSummary(input: {
+  conversation: AppChatMessage[];
+  memoTitle: string;
+  memoBody: string;
+  todos: string[];
+}) {
+  const data = loadGuestData();
+  const summary: AppChatSummary = {
+    id: createId(),
+    createdAt: new Date().toISOString(),
+    conversation: input.conversation,
+    memoTitle: input.memoTitle,
+    memoBody: input.memoBody,
+    todos: input.todos,
+  };
+  data.chatSummaries = [summary, ...data.chatSummaries];
+  saveGuestData(data);
+  return summary;
 }
