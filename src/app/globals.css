@@ -2201,7 +2201,7 @@ button.calendar-cell {
 .preview-ai-block {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
-  align-items: start;
+  align-items: center;
   gap: 8px;
 }
 
@@ -2209,23 +2209,12 @@ button.calendar-cell {
   display: grid;
   width: 28px;
   height: 28px;
-  margin-top: 2px;
-  overflow: hidden;
+  place-items: center;
   border-radius: 8px;
-  background: #1c1732;
-  box-shadow: 0 0 10px rgba(150, 130, 255, 0.4);
-}
-
-.preview-ai-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.preview-ai-stack {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
+  background: rgba(28, 23, 50, 0.95);
+  box-shadow: 0 0 10px rgba(150, 130, 255, 0.28);
+  font-size: 15px;
+  line-height: 1;
 }
 
 .preview-bubble.ai {
@@ -2237,24 +2226,33 @@ button.calendar-cell {
 
 .preview-schedule-card {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 10px;
+  width: 100%;
   border: 1px solid rgba(180, 166, 255, 0.14);
   border-radius: 16px;
   background: rgba(32, 26, 58, 0.96);
-  padding: 11px 12px;
+  padding: 12px 14px;
 }
 
-.preview-schedule-icon {
-  display: block;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
+.preview-schedule-emoji {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 20px;
+  line-height: 1;
 }
 
 .preview-schedule-copy {
   min-width: 0;
+}
+
+.preview-schedule-copy strong {
+  white-space: nowrap;
 }
 
 .preview-schedule-card strong,
