@@ -11,7 +11,9 @@ export type AnalyticsEvent =
   | "arrange_chat"
   | "succeed_to_chat"
   | "add_to_write"
-  | "login_social";
+  | "login_social"
+  | "chat_error"
+  | "chat_timeout";
 
 declare global {
   interface Window {
@@ -54,4 +56,3 @@ export function consumePendingKakaoLogin() {
   }
   return pending;
 }
-

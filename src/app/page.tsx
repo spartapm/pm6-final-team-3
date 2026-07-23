@@ -74,6 +74,7 @@ type ModalType =
   | "manualTodo"
   | "saved"
   | "cancel"
+  | "leaveUnsaved"
   | "logout"
   | "deleteSchedule"
   | "deleteMemo"
@@ -101,6 +102,7 @@ type AiSummary = {
   memo: {
     title: string;
     body: string;
+    accepted?: boolean | null;
   };
   todos: string[];
   schedules: ScheduleSuggestion[];
@@ -169,7 +171,7 @@ const navItems: Array<{ tab: Tab; label: string; icon: IconName }> = [
 
 export default function HaruFairyApp() {
   const [activeTab, setActiveTab] = useState<Tab>("home");
-  const [recordMode, setRecordMode] = useState<RecordMode>("memo");
+  const [recordMode, setRecordMode] = useState<RecordMode>("todo");
   const [chatDone, setChatDone] = useState(false);
   const [modal, setModal] = useState<ModalType | null>(null);
   const [pendingCloseModal, setPendingCloseModal] = useState<ModalType | null>(null);
@@ -195,9 +197,12 @@ export default function HaruFairyApp() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [isSavingSummary, setIsSavingSummary] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [appError, setAppError] = useState<string | null>(null);
   const [hasHydratedTab, setHasHydratedTab] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
 
   const monthDays = useMemo(
     () => buildMonthDays(viewYear, viewMonthIndex),
@@ -228,6 +233,24 @@ export default function HaruFairyApp() {
   function completeOnboarding() {
     window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "1");
     setShowOnboarding(false);
+  }
+
+  function showToast(message: string) {
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    setToastMessage(message);
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+      toastTimerRef.current = null;
+    }, 2400);
+  }
+
+  function resetChatSession() {
+    setChatDone(false);
+    setSummary(null);
+    setMessages(initialMessages);
+    setMessageDraft("");
   }
 
   useEffect(() => {
@@ -449,10 +472,9 @@ export default function HaruFairyApp() {
     setAppError(null);
 
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "chat", messages: nextMessages }),
+      const response = await fetchChatApi({
+        mode: "chat",
+        messages: nextMessages,
       });
       const data = (await response.json()) as { reply?: string; error?: string };
 
@@ -466,6 +488,7 @@ export default function HaruFairyApp() {
         { id: Date.now() + 1, from: "ai", text: reply },
       ]);
     } catch (error) {
+      trackChatFailure(error, "chat");
       setAppError(getErrorMessage(error));
       setMessages((currentMessages) => [
         ...currentMessages,
@@ -486,14 +509,10 @@ export default function HaruFairyApp() {
     setAppError(null);
 
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: "summary",
-          messages,
-          today: today.dateKey,
-        }),
+      const response = await fetchChatApi({
+        mode: "summary",
+        messages,
+        today: today.dateKey,
       });
       const data = (await response.json()) as {
         summary?: AiSummary;
@@ -504,9 +523,20 @@ export default function HaruFairyApp() {
         throw new Error(data.error || "정리 결과를 만들지 못했어요.");
       }
 
-      setSummary(data.summary);
+      setSummary({
+        ...data.summary,
+        memo: {
+          ...data.summary.memo,
+          accepted: data.summary.memo.accepted ?? true,
+        },
+        schedules: data.summary.schedules.map((schedule) => ({
+          ...schedule,
+          accepted: schedule.accepted ?? true,
+        })),
+      });
       setChatDone(true);
     } catch (error) {
+      trackChatFailure(error, "summary");
       setAppError(getErrorMessage(error));
     } finally {
       setIsSummarizing(false);
@@ -515,21 +545,27 @@ export default function HaruFairyApp() {
 
   async function saveSummary() {
     const userId = requireUserId();
-    if (!summary) {
+    if (!summary || isSavingSummary) {
       return;
     }
 
+    setIsSavingSummary(true);
+    setAppError(null);
+
     try {
+      const shouldSaveMemo = summary.memo.accepted !== false;
       const acceptedSchedules = summary.schedules.filter(
         (schedule) => schedule.accepted !== false,
       );
 
       if (isGuestUser(userId)) {
-        const memo = guestCreateMemo({
-          date: today.dateKey,
-          title: summary.memo.title,
-          body: summary.memo.body,
-        });
+        const memo = shouldSaveMemo
+          ? guestCreateMemo({
+              date: today.dateKey,
+              title: summary.memo.title,
+              body: summary.memo.body,
+            })
+          : null;
         const createdTodos = summary.todos.map((text) =>
           guestCreateTodo({
             date: today.dateKey,
@@ -551,25 +587,30 @@ export default function HaruFairyApp() {
           memoBody: summary.memo.body,
           todos: summary.todos,
         });
-        setMemos((current) => [memo, ...current]);
+        if (memo) {
+          setMemos((current) => [memo, ...current]);
+        }
         setTodos((current) => [...createdTodos, ...current]);
         if (createdSchedules.length > 0) {
           setSchedules((current) => [...createdSchedules, ...current]);
         }
         setChatSummaries((current) => [chatSummary, ...current]);
         trackEvent("succeed_to_chat");
+        showToast("저장이 완료되었어요.");
         setModal("saved");
         return;
       }
 
       const [memo, createdTodos, createdSchedules] = await Promise.all([
-        createMemo({
-          userId,
-          date: today.dateKey,
-          title: summary.memo.title,
-          body: summary.memo.body,
-          source: "ai",
-        }),
+        shouldSaveMemo
+          ? createMemo({
+              userId,
+              date: today.dateKey,
+              title: summary.memo.title,
+              body: summary.memo.body,
+              source: "ai",
+            })
+          : Promise.resolve(null),
         Promise.all(
           summary.todos.map((text) =>
             createTodo({
@@ -605,14 +646,39 @@ export default function HaruFairyApp() {
         scheduleSuggestions: acceptedSchedules,
       });
 
-      setMemos((current) => [memo, ...current]);
+      if (memo) {
+        setMemos((current) => [memo, ...current]);
+      }
       setTodos((current) => [...createdTodos, ...current]);
       if (createdSchedules.length > 0) {
         setSchedules((current) => [...createdSchedules, ...current]);
       }
       setChatSummaries((current) => [chatSummary, ...current]);
       trackEvent("succeed_to_chat");
+      showToast("저장이 완료되었어요.");
       setModal("saved");
+    } catch (error) {
+      setAppError(getErrorMessage(error));
+      showToast("저장에 실패했어요. 다시 시도해주세요.");
+    } finally {
+      setIsSavingSummary(false);
+    }
+  }
+
+  async function removeScheduleNow(schedule: Schedule) {
+    try {
+      if (isGuestUser(requireUserId())) {
+        guestDeleteSchedule(schedule.id);
+      } else {
+        await deleteSchedule(schedule.id);
+      }
+      setSchedules((current) =>
+        current.filter((item) => item.id !== schedule.id),
+      );
+      showToast("일정이 삭제되었어요.");
+      if (modal === "deleteSchedule" || modal === "scheduleEdit") {
+        closeModal();
+      }
     } catch (error) {
       setAppError(getErrorMessage(error));
     }
@@ -634,20 +700,6 @@ export default function HaruFairyApp() {
 
   function requireUserId() {
     return getActorId();
-  }
-
-  function toAuthEmail(rawId: string) {
-    const value = rawId.trim();
-    if (value.includes("@")) {
-      return value;
-    }
-    return `${value}@harufairy.local`;
-  }
-
-  // Supabase Auth 최소 6자 요건을 맞추면서, UX는 숫자 4자리로 유지
-  function toAuthPassword(rawPassword: string) {
-    const value = rawPassword.trim();
-    return value.length < 6 ? `${value}__hf` : value;
   }
 
   async function signInWithKakao() {
@@ -677,62 +729,6 @@ export default function HaruFairyApp() {
 
     trackEvent(navEvents[tab]);
     setActiveTab(tab);
-  }
-
-  async function signInWithEmail(id: string, password: string) {
-    setAppError(null);
-    const { error } = await supabase.auth.signInWithPassword({
-      email: toAuthEmail(id),
-      password: toAuthPassword(password),
-    });
-
-    if (error) {
-      setAppError(getAuthErrorMessage(error, "login"));
-      throw error;
-    }
-  }
-
-  async function signUpWithEmail(input: {
-    id: string;
-    nickname: string;
-    password: string;
-  }) {
-    setAppError(null);
-    const email = toAuthEmail(input.id);
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password: toAuthPassword(input.password),
-      options: {
-        data: {
-          name: input.nickname.trim(),
-          nickname: input.nickname.trim(),
-        },
-      },
-    });
-
-    if (error) {
-      setAppError(getAuthErrorMessage(error, "signup"));
-      throw error;
-    }
-
-    // 이미 가입된 아이디인데 메일 인증이 켜져 있으면, 에러 대신 빈 identities로 올 수 있음
-    if (data.user && (data.user.identities?.length ?? 0) === 0) {
-      setAppError("이미 사용 중인 아이디예요. 다른 아이디로 가입해 주세요.");
-      return;
-    }
-
-    if (data.user && !data.session) {
-      setAppError("가입은 되었지만 바로 로그인되지 않았어요. 로그인 탭에서 다시 시도해 주세요.");
-      return;
-    }
-
-    if (data.session) {
-      await upsertProfile({
-        userId: data.session.user.id,
-        nickname: input.nickname.trim() || getEmailName(email) || "사용자",
-        provider: "email",
-      });
-    }
   }
 
   async function signOut() {
@@ -787,6 +783,10 @@ export default function HaruFairyApp() {
                 setEditingTodo(todo);
                 setModal("todoItemEdit");
               }}
+              onDeleteTodo={(todoId) => {
+                setDeletingTodoId(todoId);
+                setModal("deleteTodo");
+              }}
             />
           )}
 
@@ -811,8 +811,7 @@ export default function HaruFairyApp() {
                 setModal("scheduleEdit");
               }}
               onDelete={(schedule) => {
-                setEditingSchedule(schedule);
-                setModal("deleteSchedule");
+                void removeScheduleNow(schedule);
               }}
             />
           )}
@@ -825,13 +824,14 @@ export default function HaruFairyApp() {
               chatDone={chatDone}
               isSending={isSendingMessage}
               isSummarizing={isSummarizing}
+              isSaving={isSavingSummary}
               onDraft={setMessageDraft}
               onSend={sendMessage}
               onFinish={finishChat}
               onSave={saveSummary}
               onBack={() => {
                 if (chatDone) {
-                  setChatDone(false);
+                  setModal("leaveUnsaved");
                   return;
                 }
                 setActiveTab("home");
@@ -844,6 +844,17 @@ export default function HaruFairyApp() {
               onEditSchedule={(index) => {
                 setEditingScheduleIndex(index);
                 setModal("scheduleEdit");
+              }}
+              onAcceptMemo={(accepted) => {
+                setSummary((current) => {
+                  if (!current) {
+                    return current;
+                  }
+                  return {
+                    ...current,
+                    memo: { ...current.memo, accepted },
+                  };
+                });
               }}
               onAcceptSchedule={(index, accepted) => {
                 setSummary((current) => {
@@ -899,13 +910,12 @@ export default function HaruFairyApp() {
               isLoggedIn={isLoggedIn}
               error={appError}
               onKakaoLogin={signInWithKakao}
-              onEmailLogin={signInWithEmail}
-              onEmailSignUp={signUpWithEmail}
               onLogout={() => setModal("logout")}
             />
           )}
         </div>
         <BottomNav activeTab={activeTab} onTab={handleNavTab} />
+        {toastMessage && <div className="app-toast">{toastMessage}</div>}
       </section>
 
       {modal === "scheduleCreate" && (
@@ -1107,6 +1117,7 @@ export default function HaruFairyApp() {
                 memo: {
                   title: payload.title,
                   body: payload.body,
+                  accepted: summary.memo.accepted,
                 },
               });
               closeModal();
@@ -1253,10 +1264,8 @@ export default function HaruFairyApp() {
           actionLabel="확인"
           onAction={() => {
             closeModal();
-            setChatDone(false);
-            setSummary(null);
-            setMessages(initialMessages);
-            setRecordMode("memo");
+            resetChatSession();
+            setRecordMode("todo");
             setActiveTab("records");
           }}
         />
@@ -1268,6 +1277,19 @@ export default function HaruFairyApp() {
           description="변경한 내용은 저장되지 않아요."
           onCancel={() => setModal(pendingCloseModal)}
           onConfirm={closeModal}
+        />
+      )}
+
+      {modal === "leaveUnsaved" && (
+        <ConfirmModal
+          title="저장하지 않고 나갈까요?"
+          description="정리된 기록이 아직 저장되지 않았어요."
+          onCancel={closeModal}
+          onConfirm={() => {
+            closeModal();
+            resetChatSession();
+            setActiveTab("home");
+          }}
         />
       )}
 
@@ -1289,19 +1311,7 @@ export default function HaruFairyApp() {
           description="삭제한 일정은 되돌릴 수 없어요."
           onCancel={() => setModal("scheduleEdit")}
           onConfirm={async () => {
-            try {
-              if (isGuestUser(requireUserId())) {
-                guestDeleteSchedule(editingSchedule.id);
-              } else {
-                await deleteSchedule(editingSchedule.id);
-              }
-              setSchedules((current) =>
-                current.filter((item) => item.id !== editingSchedule.id),
-              );
-              closeModal();
-            } catch (error) {
-              setAppError(getErrorMessage(error));
-            }
+            await removeScheduleNow(editingSchedule);
           }}
         />
       )}
@@ -1345,6 +1355,7 @@ export default function HaruFairyApp() {
                 current.filter((item) => item.id !== deletingTodoId),
               );
               closeModal();
+              showToast("할 일이 삭제되었어요.");
             } catch (error) {
               setAppError(getErrorMessage(error));
             }
@@ -1369,6 +1380,7 @@ function HomeScreen({
   onToggleTodo,
   onAddTodo,
   onEditTodo,
+  onDeleteTodo,
 }: {
   userName: string;
   isLoading: boolean;
@@ -1390,6 +1402,7 @@ function HomeScreen({
   onToggleTodo: (id: string) => void;
   onAddTodo: () => void;
   onEditTodo: (todo: Todo) => void;
+  onDeleteTodo: (todoId: string) => void;
 }) {
   return (
     <div className="space-y-6">
@@ -1445,6 +1458,7 @@ function HomeScreen({
           todos={todos}
           onToggle={onToggleTodo}
           onEdit={onEditTodo}
+          onDelete={onDeleteTodo}
           emptyText="등록된 To-do가 없습니다"
         />
         <button className="ghost-add-button" onClick={onAddTodo}>
@@ -1561,6 +1575,7 @@ function ChatScreen({
   chatDone,
   isSending,
   isSummarizing,
+  isSaving,
   onDraft,
   onSend,
   onFinish,
@@ -1569,6 +1584,7 @@ function ChatScreen({
   onEditMemo,
   onEditTodo,
   onEditSchedule,
+  onAcceptMemo,
   onAcceptSchedule,
 }: {
   messages: Message[];
@@ -1577,6 +1593,7 @@ function ChatScreen({
   chatDone: boolean;
   isSending: boolean;
   isSummarizing: boolean;
+  isSaving: boolean;
   onDraft: (value: string) => void;
   onSend: () => Promise<void>;
   onFinish: () => Promise<void>;
@@ -1585,6 +1602,7 @@ function ChatScreen({
   onEditMemo: () => void;
   onEditTodo: () => void;
   onEditSchedule: (index: number) => void;
+  onAcceptMemo: (accepted: boolean) => void;
   onAcceptSchedule: (index: number, accepted: boolean) => void;
 }) {
   if (chatDone && summary) {
@@ -1601,8 +1619,33 @@ function ChatScreen({
           <p>AI가 대화를 바탕으로 작성했어요. 확인하고 저장해주세요.</p>
         </header>
 
-        <ResultCard title={summary.memo.title} onEdit={onEditMemo}>
-          <p>{summary.memo.body}</p>
+        <ResultCard title={summary.memo.title || "메모"} onEdit={onEditMemo}>
+          <div className="suggestion-card">
+            <p>{summary.memo.body}</p>
+            <p>
+              {summary.memo.accepted === false
+                ? "이 메모는 무시됩니다."
+                : "이 메모를 기록에 등록할까요?"}
+            </p>
+            <div className="suggestion-actions">
+              <button
+                type="button"
+                className={summary.memo.accepted === false ? "active" : ""}
+                onClick={() => onAcceptMemo(false)}
+                disabled={isSaving}
+              >
+                무시
+              </button>
+              <button
+                type="button"
+                className={summary.memo.accepted !== false ? "active" : ""}
+                onClick={() => onAcceptMemo(true)}
+                disabled={isSaving}
+              >
+                등록
+              </button>
+            </div>
+          </div>
         </ResultCard>
 
         {summary.todos.length > 0 && (
@@ -1640,6 +1683,7 @@ function ChatScreen({
                   type="button"
                   className={schedule.accepted === false ? "active" : ""}
                   onClick={() => onAcceptSchedule(index, false)}
+                  disabled={isSaving}
                 >
                   무시
                 </button>
@@ -1647,6 +1691,7 @@ function ChatScreen({
                   type="button"
                   className={schedule.accepted !== false ? "active" : ""}
                   onClick={() => onAcceptSchedule(index, true)}
+                  disabled={isSaving}
                 >
                   등록
                 </button>
@@ -1655,8 +1700,12 @@ function ChatScreen({
           </ResultCard>
         ))}
 
-        <button className="primary-action bottom-space" onClick={onSave}>
-          저장하고 완료
+        <button
+          className="primary-action bottom-space"
+          onClick={onSave}
+          disabled={isSaving}
+        >
+          {isSaving ? "저장 중..." : "저장하고 완료"}
         </button>
       </div>
     );
@@ -1904,189 +1953,24 @@ function MyScreen({
   isLoggedIn,
   error,
   onKakaoLogin,
-  onEmailLogin,
-  onEmailSignUp,
   onLogout,
 }: {
   userName: string;
   isLoggedIn: boolean;
   error: string | null;
   onKakaoLogin: () => void;
-  onEmailLogin: (id: string, password: string) => Promise<void>;
-  onEmailSignUp: (input: {
-    id: string;
-    nickname: string;
-    password: string;
-  }) => Promise<void>;
   onLogout: () => void;
 }) {
-  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
-  const [userId, setUserId] = useState("");
-  const [nickname, setNickname] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setFormError(null);
-
-    if (!userId.trim() || !password.trim()) {
-      setFormError("아이디와 비밀번호를 입력해 주세요.");
-      return;
-    }
-
-    if (userId.trim().includes("@")) {
-      setFormError("이메일이 아니라 아이디만 입력해 주세요.");
-      return;
-    }
-
-    if (authMode === "signup" && !/^\d{4}$/.test(password.trim())) {
-      setFormError("비밀번호는 숫자 4자리로 입력해 주세요.");
-      return;
-    }
-
-    if (authMode === "login" && password.trim().length < 4) {
-      setFormError("비밀번호를 입력해 주세요.");
-      return;
-    }
-
-    if (authMode === "signup" && !nickname.trim()) {
-      setFormError("닉네임을 입력해 주세요.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      if (authMode === "login") {
-        await onEmailLogin(userId, password);
-      } else {
-        await onEmailSignUp({
-          id: userId,
-          nickname,
-          password,
-        });
-      }
-    } catch {
-      // parent sets appError
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
   if (!isLoggedIn) {
     return (
       <div className="auth-gate">
-        {(error || formError) && (
-          <p className="status-copy error">{formError || error}</p>
-        )}
+        {error && <p className="status-copy error">{error}</p>}
         <section className="my-card auth-card">
           <div className="auth-logo">
             <LogoMark />
           </div>
-          <h1>하루 요정 시작하기</h1>
-          <p>
-            {authMode === "login"
-              ? "카카오 또는 아이디로 로그인할 수 있어요."
-              : "아이디·닉네임·숫자 4자리 비밀번호로 가입해요."}
-          </p>
-
-          <div className="auth-mode-tabs">
-            <button
-              type="button"
-              className={authMode === "login" ? "active" : ""}
-              onClick={() => setAuthMode("login")}
-            >
-              로그인
-            </button>
-            <button
-              type="button"
-              className={authMode === "signup" ? "active" : ""}
-              onClick={() => setAuthMode("signup")}
-            >
-              회원가입
-            </button>
-          </div>
-
-          <form className="auth-form" onSubmit={handleSubmit} noValidate>
-            <label className="auth-field">
-              <span>아이디</span>
-              <input
-                type="text"
-                inputMode="text"
-                value={userId}
-                onChange={(event) => setUserId(event.target.value)}
-                placeholder="사용할 아이디 (이메일 아님)"
-                autoComplete="username"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-              />
-            </label>
-            {authMode === "signup" && (
-              <label className="auth-field">
-                <span>닉네임</span>
-                <input
-                  type="text"
-                  value={nickname}
-                  onChange={(event) => setNickname(event.target.value)}
-                  placeholder="사용할 닉네임"
-                  autoComplete="nickname"
-                />
-              </label>
-            )}
-            <label className="auth-field">
-              <span>비밀번호</span>
-              <div className="auth-password-row">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  inputMode={authMode === "signup" ? "numeric" : "text"}
-                  pattern={authMode === "signup" ? "[0-9]*" : undefined}
-                  maxLength={authMode === "signup" ? 4 : undefined}
-                  value={password}
-                  onChange={(event) => {
-                    const next = event.target.value;
-                    setPassword(
-                      authMode === "signup"
-                        ? next.replace(/\D/g, "").slice(0, 4)
-                        : next,
-                    );
-                  }}
-                  placeholder={
-                    authMode === "signup" ? "숫자 4자리" : "비밀번호 입력"
-                  }
-                  autoComplete={
-                    authMode === "login" ? "current-password" : "new-password"
-                  }
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((current) => !current)}
-                >
-                  {showPassword ? "숨김" : "보기"}
-                </button>
-              </div>
-              {authMode === "signup" && (
-                <small>숫자 4자리로 입력해 주세요</small>
-              )}
-            </label>
-            <button
-              className="primary-action full"
-              type="submit"
-              disabled={isSubmitting}
-            >
-              {isSubmitting
-                ? "처리 중..."
-                : authMode === "login"
-                  ? "로그인"
-                  : "가입하기"}
-            </button>
-          </form>
-
-          <div className="auth-divider">
-            <span>또는</span>
-          </div>
+          <h1>로그인하고 기록을 지켜요</h1>
+          <p>여러 기기에서 동기화하고 안전하게 백업해요</p>
 
           <button className="kakao-action" onClick={onKakaoLogin}>
             <Icon name="kakao" />
@@ -3083,62 +2967,44 @@ function formatKoreanDate(date: string) {
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
+    if (error.name === "AbortError") {
+      return "응답 시간이 초과되었어요. 다시 시도해주세요.";
+    }
     return error.message;
   }
 
   return "일시적인 오류가 발생했어요. 다시 시도해주세요.";
 }
 
-function getAuthErrorMessage(
-  error: unknown,
-  mode: "login" | "signup" = "login",
-) {
-  const message = error instanceof Error ? error.message : "";
-  const lower = message.toLowerCase();
+const CHAT_TIMEOUT_MS = 30000;
 
-  if (
-    lower.includes("already registered") ||
-    lower.includes("already been registered") ||
-    lower.includes("user already exists")
-  ) {
-    return "이미 사용 중인 아이디예요. 다른 아이디로 가입해 주세요.";
+async function fetchChatApi(body: Record<string, unknown>) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), CHAT_TIMEOUT_MS);
+
+  try {
+    return await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+function trackChatFailure(error: unknown, stage: "chat" | "summary") {
+  if (error instanceof Error && error.name === "AbortError") {
+    trackEvent("chat_timeout", { stage });
+    return;
   }
 
-  if (lower.includes("password") && (lower.includes("6") || lower.includes("least"))) {
-    return "비밀번호는 숫자 4자리로 입력해 주세요.";
-  }
-
-  if (
-    lower.includes("invalid format") ||
-    lower.includes("unable to validate email") ||
-    (lower.includes("email address") && lower.includes("invalid"))
-  ) {
-    return "사용할 수 없는 아이디예요. 영문·숫자 조합의 다른 아이디로 시도해 주세요.";
-  }
-
-  if (lower.includes("rate limit") || lower.includes("too many requests")) {
-    return "요청이 너무 많아요. 잠시 후 다시 시도해 주세요.";
-  }
-
-  if (lower.includes("email not confirmed") || lower.includes("not confirmed")) {
-    return "아직 가입이 완료되지 않은 계정이에요. 잠시 후 다시 로그인해 주세요.";
-  }
-
-  if (
-    lower.includes("invalid login") ||
-    lower.includes("invalid credentials") ||
-    lower.includes("invalid email or password")
-  ) {
-    return mode === "signup"
-      ? "가입에 실패했어요. 아이디·닉네임·비밀번호를 다시 확인해 주세요."
-      : "아이디 또는 비밀번호가 맞지 않아요. 다시 확인해 주세요.";
-  }
-
-  if (mode === "signup") {
-    return "회원가입에 실패했어요. 입력 정보를 확인한 뒤 다시 시도해 주세요.";
-  }
-
-  return "로그인에 실패했어요. 아이디와 비밀번호를 확인해 주세요.";
+  const reason =
+    error instanceof Error && error.message
+      ? error.message.slice(0, 120)
+      : "unknown";
+  trackEvent("chat_error", { stage, reason });
 }
 
 function formatScheduleTimeLabel(
