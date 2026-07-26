@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://pm6-final-team-3.vercel.app/sitemap.xml
