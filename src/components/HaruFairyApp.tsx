@@ -7,7 +7,6 @@ import {
   useRef,
   useState,
   type FormEvent,
-  type PointerEvent as ReactPointerEvent,
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
@@ -73,8 +72,6 @@ type ModalType =
   | "manualMemo"
   | "manualTodo"
   | "saved"
-  | "cancel"
-  | "leaveUnsaved"
   | "logout"
   | "deleteSchedule"
   | "deleteMemo"
@@ -174,7 +171,7 @@ export function HaruFairyApp() {
   const [recordMode, setRecordMode] = useState<RecordMode>("todo");
   const [chatDone, setChatDone] = useState(false);
   const [modal, setModal] = useState<ModalType | null>(null);
-  const [pendingCloseModal, setPendingCloseModal] = useState<ModalType | null>(null);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<AppProfile | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -223,11 +220,47 @@ export function HaruFairyApp() {
   const selectedDay = Number(selectedDateKey.split("-")[2]);
 
   useEffect(() => {
-    // 링크/새로고침 진입은 항상 홈 화면
-    setActiveTab("home");
-    window.localStorage.setItem(TAB_STORAGE_KEY, "home");
+    setActiveTab(readStoredTab());
     setHasHydratedTab(true);
     setShowOnboarding(!window.localStorage.getItem(ONBOARDING_STORAGE_KEY));
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const viewport = window.visualViewport;
+
+    function syncKeyboardInset() {
+      const appRoot = document.querySelector(".app-root");
+      if (!viewport) {
+        root.style.setProperty("--keyboard-inset", "0px");
+        appRoot?.classList.remove("keyboard-open");
+        return;
+      }
+
+      const inset = Math.max(
+        0,
+        window.innerHeight - viewport.height - viewport.offsetTop,
+      );
+      root.style.setProperty("--keyboard-inset", `${Math.round(inset)}px`);
+      if (inset > 80) {
+        appRoot?.classList.add("keyboard-open");
+      } else {
+        appRoot?.classList.remove("keyboard-open");
+      }
+    }
+
+    syncKeyboardInset();
+    viewport?.addEventListener("resize", syncKeyboardInset);
+    viewport?.addEventListener("scroll", syncKeyboardInset);
+    window.addEventListener("resize", syncKeyboardInset);
+
+    return () => {
+      viewport?.removeEventListener("resize", syncKeyboardInset);
+      viewport?.removeEventListener("scroll", syncKeyboardInset);
+      window.removeEventListener("resize", syncKeyboardInset);
+      root.style.setProperty("--keyboard-inset", "0px");
+      document.querySelector(".app-root")?.classList.remove("keyboard-open");
+    };
   }, []);
 
   function completeOnboarding() {
@@ -414,10 +447,9 @@ export function HaruFairyApp() {
     setViewMonthIndex(date.getMonth());
   }
 
-  function requestCloseModal(source: ModalType, dirty: boolean) {
+  function requestCloseModal(_source: ModalType, dirty: boolean) {
     if (dirty) {
-      setPendingCloseModal(source);
-      setModal("cancel");
+      setCancelConfirmOpen(true);
       return;
     }
     closeModal();
@@ -685,8 +717,8 @@ export function HaruFairyApp() {
   }
 
   function closeModal() {
+    setCancelConfirmOpen(false);
     setModal(null);
-    setPendingCloseModal(null);
     setEditingSchedule(null);
     setEditingMemo(null);
     setEditingTodo(null);
@@ -827,7 +859,9 @@ export function HaruFairyApp() {
               onSave={saveSummary}
               onBack={() => {
                 if (chatDone) {
-                  setModal("leaveUnsaved");
+                  // 정리 결과 → 기존 대화로 복귀 (대화 내역 유지)
+                  setChatDone(false);
+                  setSummary(null);
                   return;
                 }
                 setActiveTab("home");
@@ -1267,25 +1301,12 @@ export function HaruFairyApp() {
         />
       )}
 
-      {modal === "cancel" && (
+      {cancelConfirmOpen && (
         <ConfirmModal
           title="작성을 취소하시겠습니까?"
           description="변경한 내용은 저장되지 않아요."
-          onCancel={() => setModal(pendingCloseModal)}
+          onCancel={() => setCancelConfirmOpen(false)}
           onConfirm={closeModal}
-        />
-      )}
-
-      {modal === "leaveUnsaved" && (
-        <ConfirmModal
-          title="저장하지 않고 나갈까요?"
-          description="정리된 기록이 아직 저장되지 않았어요."
-          onCancel={closeModal}
-          onConfirm={() => {
-            closeModal();
-            resetChatSession();
-            setActiveTab("home");
-          }}
         />
       )}
 
@@ -2068,95 +2089,28 @@ function SwipeScheduleRow({
   onEdit: (schedule: Schedule) => void;
   onDelete: (schedule: Schedule) => void;
 }) {
-  const [offset, setOffset] = useState(0);
-  const startX = useRef(0);
-  const startOffset = useRef(0);
-  const dragging = useRef(false);
-  const moved = useRef(false);
-  const ignoreClick = useRef(false);
-
-  function resetSwipe() {
-    setOffset(0);
-  }
-
-  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    // 마우스(노트북)는 스와이프 제스처를 쓰지 않고 클릭 수정만 사용
-    if (event.pointerType === "mouse") {
-      return;
-    }
-    dragging.current = true;
-    moved.current = false;
-    startX.current = event.clientX;
-    startOffset.current = offset;
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }
-
-  function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!dragging.current) {
-      return;
-    }
-    const delta = event.clientX - startX.current;
-    if (Math.abs(delta) > 8) {
-      moved.current = true;
-    }
-    const next = Math.min(0, Math.max(-88, startOffset.current + delta));
-    setOffset(next);
-  }
-
-  function onPointerUp() {
-    if (!dragging.current) {
-      return;
-    }
-    dragging.current = false;
-    if (moved.current) {
-      ignoreClick.current = true;
-      setOffset((current) => (current < -44 ? -88 : 0));
-      window.setTimeout(() => {
-        ignoreClick.current = false;
-      }, 0);
-      return;
-    }
-    resetSwipe();
-  }
-
-  function openEdit() {
-    if (ignoreClick.current || offset < -20) {
-      resetSwipe();
-      return;
-    }
-    onEdit(schedule);
-  }
-
   return (
-    <div className="swipe-schedule-row">
+    <div className="schedule-row-split">
       <button
         type="button"
-        className="swipe-delete-action"
+        className="schedule-card"
+        onClick={() => onEdit(schedule)}
+      >
+        <ScheduleBar color={schedule.color} />
+        <strong>{schedule.time.replace("오늘 ", "")}</strong>
+        <em>{schedule.title}</em>
+        <span className="schedule-edit-button" aria-hidden="true">
+          <Icon name="pencil" />
+        </span>
+      </button>
+      <button
+        type="button"
+        className="schedule-delete-side"
         aria-label="일정 삭제"
         onClick={() => onDelete(schedule)}
       >
         삭제
       </button>
-      <div
-        className="swipe-schedule-front"
-        style={{ transform: `translateX(${offset}px)` }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-      >
-        <button type="button" className="schedule-card" onClick={openEdit}>
-          <ScheduleBar color={schedule.color} />
-          <strong>{schedule.time.replace("오늘 ", "")}</strong>
-          <em>{schedule.title}</em>
-          <span
-            className="schedule-edit-button"
-            aria-hidden="true"
-          >
-            <Icon name="pencil" />
-          </span>
-        </button>
-      </div>
     </div>
   );
 }
@@ -2488,13 +2442,15 @@ function ScheduleModal({
           {submitLabel}
         </button>
         {onDelete && (
-          <button
-            type="button"
-            className="secondary-action full"
-            onClick={onDelete}
-          >
-            일정 삭제
-          </button>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="secondary-action full"
+              onClick={onDelete}
+            >
+              일정 삭제
+            </button>
+          </div>
         )}
       </form>
     </ModalShell>
@@ -2863,15 +2819,20 @@ function groupMemosByDate(memos: Memo[]) {
 }
 
 function groupTodosByDate(todos: Todo[]) {
-  return todos.reduce<Array<{ date: string; items: Todo[] }>>((groups, todo) => {
-    const group = groups.find((item) => item.date === todo.date);
-    if (group) {
-      group.items.push(todo);
-      return groups;
-    }
+  const groups = todos.reduce<Array<{ date: string; items: Todo[] }>>(
+    (acc, todo) => {
+      const group = acc.find((item) => item.date === todo.date);
+      if (group) {
+        group.items.push(todo);
+        return acc;
+      }
 
-    return [...groups, { date: todo.date, items: [todo] }];
-  }, []);
+      return [...acc, { date: todo.date, items: [todo] }];
+    },
+    [],
+  );
+
+  return groups.sort((a, b) => b.date.localeCompare(a.date));
 }
 
 function groupChatSummariesByDate(chats: ChatSummary[]) {

@@ -131,14 +131,8 @@ export const scheduleColorChips = [
 ] as const;
 
 export function getScheduleBarAsset(color: string) {
-  const normalized = color.toLowerCase();
-  const orangeHints = ["eda640", "ffd195", "f1b46c", "ff9e", "ec5b"];
-
-  if (orangeHints.some((hint) => normalized.includes(hint))) {
-    return "/assets/home_screen_svg_assets/event_bar_orange.svg";
-  }
-
-  return "/assets/home_screen_svg_assets/event_bar_purple.svg";
+  // Kept for callers; bars now render with CSS color to match calendar dots.
+  return color;
 }
 
 export function Icon({ name, className = "", size, active = false }: IconProps) {
@@ -216,13 +210,10 @@ function InlineIcon({
 
 export function ScheduleBar({ color }: { color: string }) {
   return (
-    <Image
+    <span
       aria-hidden
       className="schedule-bar-asset"
-      src={getScheduleBarAsset(color)}
-      alt=""
-      width={6}
-      height={56}
+      style={{ backgroundColor: color || "#A864D4" }}
     />
   );
 }
