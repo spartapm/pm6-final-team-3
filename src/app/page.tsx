@@ -25,9 +25,9 @@ function IntroSection() {
 
 export default function Page() {
   return (
-    <>
+    <main>
       <IntroSection />
       <HaruFairyApp />
-    </>
+    </main>
   );
 }

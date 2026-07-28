@@ -740,19 +740,15 @@ export function HaruFairyApp() {
   }
 
   if (showOnboarding === null) {
-    return <main />;
+    return null;
   }
 
   if (showOnboarding) {
-    return (
-      <main>
-        <OnboardingScreen onComplete={completeOnboarding} />
-      </main>
-    );
+    return <OnboardingScreen onComplete={completeOnboarding} />;
   }
 
   return (
-    <main>
+    <div className="app-root">
       <section className="screen-shell">
         <div className="screen-scroll">
           {activeTab === "home" && (
@@ -1362,7 +1358,7 @@ export function HaruFairyApp() {
           }}
         />
       )}
-    </main>
+    </div>
   );
 }
 
