@@ -49,7 +49,9 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
-  interactiveWidget: "resizes-content",
+  // Prevent the browser from resizing/pushing the page when the keyboard opens.
+  // We lift the chat composer ourselves via visualViewport.
+  interactiveWidget: "overlays-content",
 };
 
 const jsonLd = {

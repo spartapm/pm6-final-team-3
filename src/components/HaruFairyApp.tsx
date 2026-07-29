@@ -167,7 +167,7 @@ const navItems: Array<{ tab: Tab; label: string; icon: IconName }> = [
 ];
 
 export function HaruFairyApp() {
-  const [activeTab, setActiveTab] = useState<Tab>("home");
+  const [activeTab, setActiveTab] = useState<Tab>(() => readStoredTab());
   const [recordMode, setRecordMode] = useState<RecordMode>("todo");
   const [chatDone, setChatDone] = useState(false);
   const [modal, setModal] = useState<ModalType | null>(null);
@@ -233,19 +233,37 @@ export function HaruFairyApp() {
       const appRoot = document.querySelector(".app-root");
       if (!viewport) {
         root.style.setProperty("--keyboard-inset", "0px");
+        root.style.setProperty("--vv-offset-top", "0px");
         appRoot?.classList.remove("keyboard-open");
         return;
       }
 
+      // Keyboard overlays the layout; lift chrome by the covered bottom inset.
       const inset = Math.max(
         0,
         window.innerHeight - viewport.height - viewport.offsetTop,
       );
       root.style.setProperty("--keyboard-inset", `${Math.round(inset)}px`);
-      if (inset > 80) {
+      root.style.setProperty(
+        "--vv-offset-top",
+        `${Math.round(viewport.offsetTop)}px`,
+      );
+
+      if (inset > 60) {
         appRoot?.classList.add("keyboard-open");
+        root.classList.add("keyboard-lock");
+        // Stop iOS from scrolling the page behind the fixed composer.
+        if (document.activeElement instanceof HTMLElement) {
+          const tag = document.activeElement.tagName;
+          if (tag === "INPUT" || tag === "TEXTAREA") {
+            window.scrollTo(0, 0);
+            document.body.scrollTop = 0;
+            document.documentElement.scrollTop = 0;
+          }
+        }
       } else {
         appRoot?.classList.remove("keyboard-open");
+        root.classList.remove("keyboard-lock");
       }
     }
 
@@ -253,12 +271,18 @@ export function HaruFairyApp() {
     viewport?.addEventListener("resize", syncKeyboardInset);
     viewport?.addEventListener("scroll", syncKeyboardInset);
     window.addEventListener("resize", syncKeyboardInset);
+    window.addEventListener("focusin", syncKeyboardInset);
+    window.addEventListener("focusout", syncKeyboardInset);
 
     return () => {
       viewport?.removeEventListener("resize", syncKeyboardInset);
       viewport?.removeEventListener("scroll", syncKeyboardInset);
       window.removeEventListener("resize", syncKeyboardInset);
+      window.removeEventListener("focusin", syncKeyboardInset);
+      window.removeEventListener("focusout", syncKeyboardInset);
       root.style.setProperty("--keyboard-inset", "0px");
+      root.style.setProperty("--vv-offset-top", "0px");
+      root.classList.remove("keyboard-lock");
       document.querySelector(".app-root")?.classList.remove("keyboard-open");
     };
   }, []);
@@ -349,8 +373,6 @@ export function HaruFairyApp() {
       setChatSummaries(guest.chatSummaries);
       setIsLoadingData(false);
       window.localStorage.removeItem("haru-has-session");
-      window.localStorage.setItem(TAB_STORAGE_KEY, "home");
-      setActiveTab("home");
       return;
     }
 
@@ -780,7 +802,7 @@ export function HaruFairyApp() {
   }
 
   return (
-    <div className="app-root">
+    <div className={`app-root${activeTab === "chat" ? " tab-chat" : ""}`}>
       <section className="screen-shell">
         <div className="screen-scroll">
           {activeTab === "home" && (
