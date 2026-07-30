@@ -16,6 +16,44 @@ type ChatRequest =
       today: string;
     };
 
+const CHAT_SYSTEM_PROMPT = [
+  "역할: '하루 요정' – 한국어 하루 기록 도우미",
+  "기본 태도:",
+  "- 사용자의 하루 이야기를 다정하게 듣는다.",
+  "- 메모/할 일/일정으로 정리할 수 있는 단서를 짧게 되묻는다.",
+  "- 답변은 2~3문장으로 간결하게 작성한다.",
+  "되묻는 질문 규칙:",
+  "- 사용자가 할 일을 이야기하면 '우선순위'를 묻지 않는다.",
+  "- 대신 그 일을 처리하기 위해 무엇을 해야 하는지, 진행 상황이 어떤지를 묻는다.",
+  '  예) 사용자: "인스타그램 업로드 해야 해."',
+  '      하루 요정: "인스타그램 업로드를 하셔야 하는군요! 제작 상황은 얼마나 진행되셨나요?"',
+  "대화 마무리 규칙:",
+  '- "더 필요한 거 있으세요?" 같은 질문에 사용자가 "없다"고 답하면, 대화를 정리하는 문장과 함께 반드시 다음 행동을 안내한다.',
+  '- "아래 정리하기 버튼을 눌러주세요." 처럼 사용자가 다음에 뭘 해야 하는지 명확히 알려주는 문장을 포함한다.',
+].join("\n");
+
+const SUMMARY_SYSTEM_PROMPT = [
+  "역할: 하루 기록을 JSON으로만 정리",
+  "출력 형식:",
+  '{"memo":{"title":string,"body":string},"todos":[{"title":string,"date":"YYYY-MM-DD"}],"schedules":[{"title":string,"date":"YYYY-MM-DD","startTime":string|null,"endTime":string|null,"isAllDay":boolean,"color":string}]}',
+  "[완료 vs 예정 - 공통 판단 규칙]",
+  '- 과거형/완료형("~했어", "~끝냈어")으로 말한 일은 todos에 넣지 않는다. memo에만 기록한다.',
+  '- 앞으로 할 일("~해야 해", "~할 거야")만 todos/schedules 대상이다.',
+  "[memo 규칙]",
+  '1. title은 항상 고정 문구 "메모에 등록할게요."로 작성한다 (내용에 따라 바뀌지 않음).',
+  "2. body는 대화에서 언급된 내용을 빠짐없이 자연스러운 문장으로 종합한다.",
+  "[todos 규칙]",
+  '1. 짧고 행동 중심 명사구로 작성 (예: "치과 가기"). title에는 "오늘/내일" 같은 날짜 표현이나 문장형을 넣지 않는다.',
+  '2. 날짜는 date 필드에 실제 날짜(YYYY-MM-DD)로 정확히 계산해서 넣는다. 불명확하면 오늘 날짜를 쓴다.',
+  "3. 같은 일이 오늘·내일 모두 해당된다고 말했다면 절대 하나로 합치지 말고 각각 생성한다.",
+  "4. 이미 완료한 일은 넣지 않는다.",
+  "[schedules 규칙]",
+  "1. 서로 다른 일정은 분리해서 각각 생성한다. 날짜 불명확 시 오늘 날짜 사용.",
+  "2. 시간이 언급된 경우 startTime/endTime에 정확히 반영하고 isAllDay는 false로 한다. 시간이 전혀 언급되지 않은 경우에만 startTime/endTime을 null로, isAllDay를 true로 한다.",
+  "3. 같은 일이 오늘·내일 모두 일정으로 언급되면 각각 생성한다.",
+  '4. 문자열 "null" 금지 → JSON null 사용.',
+].join("\n");
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as ChatRequest;
@@ -64,8 +102,7 @@ async function requestChatReply(
   const data = await callOpenAI([
     {
       role: "system",
-      content:
-        "너는 '하루 요정'이라는 한국어 기록 도우미야. 사용자의 하루 이야기를 다정하게 듣고, 메모/할 일/일정으로 정리할 수 있는 단서를 짧게 되물어봐. 답변은 2~3문장으로 간결하게 해.",
+      content: CHAT_SYSTEM_PROMPT,
     },
     ...messages,
   ]);
@@ -81,16 +118,7 @@ async function requestSummary(
   const data = await callOpenAI([
     {
       role: "system",
-      content: [
-        "너는 하루 기록을 JSON으로 정리하는 도우미야. 반드시 JSON만 출력해.",
-        '형식: {"memo":{"title":"","body":""},"todos":[""],"schedules":[{"title":"","date":"YYYY-MM-DD","startTime":"HH:mm"|null,"endTime":"HH:mm"|null,"isAllDay":true,"color":"#AFA0FF"}]}',
-        "규칙:",
-        "1) todos는 짧고 행동 중심의 명사구로 작성해. 예: '치과 가기', '정형외과 예약', '보고서 제출'.",
-        "2) todos에 '오늘/내일/모레', '해야 해/가야 해/가야함' 같은 문장형·날짜 표현을 넣지 마.",
-        "3) 날짜/시간 정보는 schedules에만 넣어. 시간이 없으면 startTime/endTime은 JSON null로 두고 isAllDay=true.",
-        "4) 절대 문자열 \"null\"을 넣지 마. 값이 없으면 JSON null을 사용해.",
-        "5) 서로 다른 일정은 별도 schedules 항목으로 분리해. 날짜가 불명확하면 오늘 날짜를 사용해.",
-      ].join(" "),
+      content: SUMMARY_SYSTEM_PROMPT,
     },
     {
       role: "user",
@@ -184,14 +212,36 @@ function normalizeSummary(value: unknown, today: string) {
       color?: unknown;
     }>;
   };
+
   const todos = Array.isArray(summary.todos)
     ? summary.todos
-        .filter(
-          (todo): todo is string =>
-            typeof todo === "string" && todo.trim().length > 0,
-        )
-        .map(normalizeTodoText)
-        .filter(Boolean)
+        .map((todo) => {
+          if (typeof todo === "string") {
+            const title = normalizeTodoText(todo);
+            return title ? { title, date: today } : null;
+          }
+          if (todo && typeof todo === "object") {
+            const item = todo as { title?: unknown; date?: unknown };
+            if (typeof item.title !== "string" || !item.title.trim()) {
+              return null;
+            }
+            const title = normalizeTodoText(item.title);
+            if (!title) {
+              return null;
+            }
+            return {
+              title,
+              date:
+                typeof item.date === "string" &&
+                item.date &&
+                item.date !== "null"
+                  ? item.date
+                  : today,
+            };
+          }
+          return null;
+        })
+        .filter((todo): todo is { title: string; date: string } => Boolean(todo))
     : [];
 
   const rawSchedules = Array.isArray(summary.schedules)
@@ -225,10 +275,7 @@ function normalizeSummary(value: unknown, today: string) {
 
   return {
     memo: {
-      title:
-        typeof summary.memo?.title === "string" && summary.memo.title
-          ? summary.memo.title
-          : "오늘의 기록",
+      title: "메모에 등록할게요.",
       body:
         typeof summary.memo?.body === "string" && summary.memo.body
           ? summary.memo.body

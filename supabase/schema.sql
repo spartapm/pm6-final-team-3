@@ -29,6 +29,8 @@ create table if not exists todos (
   todo_date date not null default current_date,
   text text not null,
   completed boolean not null default false,
+  color text null,
+  tag text null,
   source text not null default 'manual' check (source in ('manual', 'ai')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

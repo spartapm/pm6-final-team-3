@@ -37,7 +37,13 @@ export function loadGuestData(): GuestData {
     const parsed = JSON.parse(raw) as Partial<GuestData>;
     return {
       memos: Array.isArray(parsed.memos) ? parsed.memos : [],
-      todos: Array.isArray(parsed.todos) ? parsed.todos : [],
+      todos: Array.isArray(parsed.todos)
+        ? parsed.todos.map((todo) => ({
+            ...todo,
+            color: todo.color ?? null,
+            tag: todo.tag ?? null,
+          }))
+        : [],
       schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
       chatSummaries: Array.isArray(parsed.chatSummaries)
         ? parsed.chatSummaries
@@ -103,13 +109,20 @@ export function guestDeleteMemo(id: string) {
   saveGuestData(data);
 }
 
-export function guestCreateTodo(input: { date: string; text: string }) {
+export function guestCreateTodo(input: {
+  date: string;
+  text: string;
+  color?: string | null;
+  tag?: string | null;
+}) {
   const data = loadGuestData();
   const todo: AppTodo = {
     id: createId(),
     date: input.date,
     text: input.text,
     done: false,
+    color: input.color ?? null,
+    tag: input.tag ?? null,
   };
   data.todos = [...data.todos, todo];
   saveGuestData(data);
@@ -121,6 +134,8 @@ export function guestUpdateTodo(input: {
   text?: string;
   date?: string;
   done?: boolean;
+  color?: string | null;
+  tag?: string | null;
 }) {
   const data = loadGuestData();
   data.todos = data.todos.map((todo) =>
@@ -130,6 +145,8 @@ export function guestUpdateTodo(input: {
           text: input.text ?? todo.text,
           date: input.date ?? todo.date,
           done: input.done ?? todo.done,
+          color: input.color !== undefined ? input.color : todo.color,
+          tag: input.tag !== undefined ? input.tag : todo.tag,
         }
       : todo,
   );

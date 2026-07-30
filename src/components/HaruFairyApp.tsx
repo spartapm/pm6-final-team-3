@@ -66,6 +66,7 @@ type ChatSummary = AppChatSummary;
 type ModalType =
   | "scheduleCreate"
   | "scheduleEdit"
+  | "scheduleSummaryEdit"
   | "memoEdit"
   | "todoEdit"
   | "todoItemEdit"
@@ -76,6 +77,19 @@ type ModalType =
   | "deleteSchedule"
   | "deleteMemo"
   | "deleteTodo";
+
+const TODO_COLOR_SWATCHES = [
+  "#F2766E",
+  "#F2C46B",
+  "#7ED9A6",
+  "#7FB0F0",
+] as const;
+
+const SUMMARY_TITLES = {
+  memo: "메모에 등록할게요.",
+  todos: "TO-DO에 등록할게요.",
+  schedules: "캘린더에 등록할게요.",
+} as const;
 
 type Todo = AppTodo;
 type Schedule = AppSchedule;
@@ -95,13 +109,17 @@ type ScheduleSuggestion = {
   color: string;
   accepted?: boolean | null;
 };
+type AiTodoSuggestion = {
+  title: string;
+  date: string;
+};
 type AiSummary = {
   memo: {
     title: string;
     body: string;
     accepted?: boolean | null;
   };
-  todos: string[];
+  todos: AiTodoSuggestion[];
   schedules: ScheduleSuggestion[];
 };
 type ScheduleFormPayload = {
@@ -114,6 +132,11 @@ type ScheduleFormPayload = {
   endTime: string | null;
   repeatDays: string[];
 };
+type TodoDraftItem = {
+  text: string;
+  color: string | null;
+  tag: string | null;
+};
 type EditorSavePayload =
   | {
       kind: "memo";
@@ -124,7 +147,7 @@ type EditorSavePayload =
   | {
       kind: "todo";
       date: string;
-      todos: string[];
+      todos: TodoDraftItem[];
     };
 const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
 const today = getTodayInfo();
@@ -620,10 +643,10 @@ export function HaruFairyApp() {
               body: summary.memo.body,
             })
           : null;
-        const createdTodos = summary.todos.map((text) =>
+        const createdTodos = summary.todos.map((todo) =>
           guestCreateTodo({
-            date: today.dateKey,
-            text,
+            date: todo.date || today.dateKey,
+            text: todo.title,
           }),
         );
         const createdSchedules = acceptedSchedules.map((schedule) =>
@@ -639,7 +662,7 @@ export function HaruFairyApp() {
           conversation: messages,
           memoTitle: summary.memo.title,
           memoBody: summary.memo.body,
-          todos: summary.todos,
+          todos: summary.todos.map((todo) => todo.title),
         });
         if (memo) {
           setMemos((current) => [memo, ...current]);
@@ -660,17 +683,17 @@ export function HaruFairyApp() {
           ? createMemo({
               userId,
               date: today.dateKey,
-              title: summary.memo.title,
+              title: summary.memo.title || SUMMARY_TITLES.memo,
               body: summary.memo.body,
               source: "ai",
             })
           : Promise.resolve(null),
         Promise.all(
-          summary.todos.map((text) =>
+          summary.todos.map((todo) =>
             createTodo({
               userId,
-              date: today.dateKey,
-              text,
+              date: todo.date || today.dateKey,
+              text: todo.title,
               source: "ai",
             }),
           ),
@@ -696,7 +719,7 @@ export function HaruFairyApp() {
         conversation: messages,
         memoTitle: summary.memo.title,
         memoBody: summary.memo.body,
-        todos: summary.todos,
+        todos: summary.todos.map((todo) => todo.title),
         scheduleSuggestions: acceptedSchedules,
       });
 
@@ -893,10 +916,7 @@ export function HaruFairyApp() {
                 setModal("memoEdit");
               }}
               onEditTodo={() => setModal("todoEdit")}
-              onEditSchedule={(index) => {
-                setEditingScheduleIndex(index);
-                setModal("scheduleEdit");
-              }}
+              onEditSchedule={() => setModal("scheduleSummaryEdit")}
               onAcceptMemo={(accepted) => {
                 setSummary((current) => {
                   if (!current) {
@@ -905,19 +925,6 @@ export function HaruFairyApp() {
                   return {
                     ...current,
                     memo: { ...current.memo, accepted },
-                  };
-                });
-              }}
-              onAcceptSchedule={(index, accepted) => {
-                setSummary((current) => {
-                  if (!current) {
-                    return current;
-                  }
-                  return {
-                    ...current,
-                    schedules: current.schedules.map((item, itemIndex) =>
-                      itemIndex === index ? { ...item, accepted } : item,
-                    ),
                   };
                 });
               }}
@@ -1181,7 +1188,7 @@ export function HaruFairyApp() {
       {modal === "todoEdit" && (
         <EditorModal
           kind="todo"
-          title="To-do"
+          title="TO-DO에 등록할게요."
           summary={summary}
           onClose={(dirty) => requestCloseModal("todoEdit", dirty)}
           onSave={async (payload) => {
@@ -1190,7 +1197,10 @@ export function HaruFairyApp() {
             }
             setSummary({
               ...summary,
-              todos: payload.todos,
+              todos: payload.todos.map((item, index) => ({
+                title: item.text,
+                date: summary.todos[index]?.date ?? payload.date,
+              })),
             });
             closeModal();
           }}
@@ -1202,7 +1212,14 @@ export function HaruFairyApp() {
           kind="todo"
           title="To-do 수정"
           manual
-          initialTodos={[editingTodo.text]}
+          singleTodo
+          initialTodos={[
+            {
+              text: editingTodo.text,
+              color: editingTodo.color,
+              tag: editingTodo.tag,
+            },
+          ]}
           initialDate={editingTodo.date}
           onClose={(dirty) => requestCloseModal("todoItemEdit", dirty)}
           onSave={async (payload) => {
@@ -1211,17 +1228,21 @@ export function HaruFairyApp() {
             }
 
             try {
-              const nextText = payload.todos[0];
+              const next = payload.todos[0];
               const updated = isGuestUser(requireUserId())
                 ? guestUpdateTodo({
                     id: editingTodo.id,
-                    text: nextText,
+                    text: next.text,
                     date: payload.date,
+                    color: next.color,
+                    tag: next.tag,
                   })
                 : await updateTodo({
                     id: editingTodo.id,
-                    text: nextText,
+                    text: next.text,
                     date: payload.date,
+                    color: next.color,
+                    tag: next.tag,
                   });
               setTodos((current) =>
                 current.map((item) => (item.id === updated.id ? updated : item)),
@@ -1283,18 +1304,22 @@ export function HaruFairyApp() {
 
             try {
               const createdTodos = isGuestUser(userId)
-                ? payload.todos.map((text) =>
+                ? payload.todos.map((item) =>
                     guestCreateTodo({
                       date: payload.date,
-                      text,
+                      text: item.text,
+                      color: item.color,
+                      tag: item.tag,
                     }),
                   )
                 : await Promise.all(
-                    payload.todos.map((text) =>
+                    payload.todos.map((item) =>
                       createTodo({
                         userId,
                         date: payload.date,
-                        text,
+                        text: item.text,
+                        color: item.color,
+                        tag: item.tag,
                       }),
                     ),
                   );
@@ -1304,6 +1329,22 @@ export function HaruFairyApp() {
             } catch (error) {
               setAppError(getErrorMessage(error));
             }
+          }}
+        />
+      )}
+
+      {modal === "scheduleSummaryEdit" && summary && (
+        <ScheduleSummaryEditModal
+          schedules={summary.schedules.filter(
+            (schedule) => schedule.accepted !== false,
+          )}
+          onClose={() => closeModal()}
+          onSave={(nextSchedules) => {
+            setSummary({
+              ...summary,
+              schedules: nextSchedules,
+            });
+            closeModal();
           }}
         />
       )}
@@ -1624,7 +1665,6 @@ function ChatScreen({
   onEditTodo,
   onEditSchedule,
   onAcceptMemo,
-  onAcceptSchedule,
 }: {
   messages: Message[];
   summary: AiSummary | null;
@@ -1640,11 +1680,14 @@ function ChatScreen({
   onBack: () => void;
   onEditMemo: () => void;
   onEditTodo: () => void;
-  onEditSchedule: (index: number) => void;
+  onEditSchedule: () => void;
   onAcceptMemo: (accepted: boolean) => void;
-  onAcceptSchedule: (index: number, accepted: boolean) => void;
 }) {
   if (chatDone && summary) {
+    const visibleSchedules = summary.schedules.filter(
+      (schedule) => schedule.accepted !== false,
+    );
+
     return (
       <div className="page-stack">
         <header className="page-header result-header">
@@ -1658,14 +1701,9 @@ function ChatScreen({
           <p>AI가 대화를 바탕으로 작성했어요. 확인하고 저장해주세요.</p>
         </header>
 
-        <ResultCard title={summary.memo.title || "메모"} onEdit={onEditMemo}>
+        <ResultCard title={SUMMARY_TITLES.memo} onEdit={onEditMemo}>
           <div className="suggestion-card">
             <p>{summary.memo.body}</p>
-            <p>
-              {summary.memo.accepted === false
-                ? "이 메모는 무시됩니다."
-                : "이 메모를 기록에 등록할까요?"}
-            </p>
             <div className="suggestion-actions">
               <button
                 type="button"
@@ -1688,56 +1726,32 @@ function ChatScreen({
         </ResultCard>
 
         {summary.todos.length > 0 && (
-          <ResultCard title="To-do 정리" onEdit={onEditTodo}>
+          <ResultCard title={SUMMARY_TITLES.todos} onEdit={onEditTodo}>
             <ul className="readonly-todos">
-              {summary.todos.map((todo) => (
-                <li key={todo}>
+              {summary.todos.map((todo, index) => (
+                <li key={`${todo.title}-${todo.date}-${index}`}>
                   <Icon name="checkbox" size={18} />
-                  {todo}
+                  {todo.title}
                 </li>
               ))}
             </ul>
           </ResultCard>
         )}
 
-        {summary.schedules.map((schedule, index) => (
-          <ResultCard
-            key={`${schedule.title}-${index}`}
-            title="일정 등록 제안"
-            onEdit={() => onEditSchedule(index)}
-          >
-            <div className="suggestion-card">
-              <strong>{schedule.title}</strong>
-              <small>
-                {formatKoreanDate(schedule.date)}
-                {formatScheduleTimeLabel(schedule.startTime, schedule.isAllDay)}
-              </small>
-              <p>
-                {schedule.accepted === false
-                  ? "이 일정은 무시됩니다."
-                  : "이 일정을 캘린더에 등록할까요?"}
-              </p>
-              <div className="suggestion-actions">
-                <button
-                  type="button"
-                  className={schedule.accepted === false ? "active" : ""}
-                  onClick={() => onAcceptSchedule(index, false)}
-                  disabled={isSaving}
-                >
-                  무시
-                </button>
-                <button
-                  type="button"
-                  className={schedule.accepted !== false ? "active" : ""}
-                  onClick={() => onAcceptSchedule(index, true)}
-                  disabled={isSaving}
-                >
-                  등록
-                </button>
-              </div>
-            </div>
+        {visibleSchedules.length > 0 && (
+          <ResultCard title={SUMMARY_TITLES.schedules} onEdit={onEditSchedule}>
+            <ul className="summary-schedule-list">
+              {visibleSchedules.map((schedule, index) => (
+                <li key={`${schedule.title}-${schedule.date}-${index}`}>
+                  <strong>{schedule.title}</strong>
+                  <small>
+                    {formatScheduleShortLabel(schedule)}
+                  </small>
+                </li>
+              ))}
+            </ul>
           </ResultCard>
-        ))}
+        )}
 
         <button
           className="primary-action bottom-space"
@@ -2166,28 +2180,40 @@ function TodoList({
     return <EmptyState text={emptyText} />;
   }
 
+  const orderedTodos = [...todos].sort(
+    (left, right) => Number(left.done) - Number(right.done),
+  );
+
   return (
     <div className="todo-list">
-      {todos.map((todo) => (
+      {orderedTodos.map((todo) => (
         <div key={todo.id} className="todo-row-wrap">
           <button
             type="button"
-            className="todo-check-button"
+            className={`todo-check-button${todo.done ? " checked" : ""}`}
             aria-label={todo.done ? "완료 취소" : "완료 처리"}
             onClick={() => onToggle(todo.id)}
+            style={
+              !todo.done && todo.color
+                ? { borderColor: todo.color, color: todo.color }
+                : undefined
+            }
           >
-            {todo.done ? (
-              <Icon name="check" size={22} />
-            ) : (
-              <Icon name="checkbox" size={22} />
-            )}
+            {todo.done ? <span className="todo-check-mark" /> : null}
           </button>
           <button
             type="button"
             className="todo-row"
             onClick={() => onEdit?.(todo)}
           >
-            <em className={todo.done ? "done" : ""}>{todo.text}</em>
+            <span className="todo-row-copy">
+              <em className={todo.done ? "done" : ""}>{todo.text}</em>
+              {todo.tag ? (
+                <span className={`todo-tag-chip${todo.done ? " done" : ""}`}>
+                  #{todo.tag.replace(/^#/, "")}
+                </span>
+              ) : null}
+            </span>
           </button>
           {onEdit && (
             <button
@@ -2483,6 +2509,7 @@ function EditorModal({
   kind,
   title,
   manual = false,
+  singleTodo = false,
   summary,
   initialMemo,
   initialTodos,
@@ -2494,28 +2521,45 @@ function EditorModal({
   kind: "memo" | "todo";
   title: string;
   manual?: boolean;
+  singleTodo?: boolean;
   summary?: AiSummary | null;
   initialMemo?: Memo | null;
-  initialTodos?: string[];
+  initialTodos?: TodoDraftItem[];
   initialDate?: string;
   onClose: (dirty: boolean) => void;
   onSave: (payload: EditorSavePayload) => Promise<void>;
   onDelete?: () => void;
 }) {
   const seedMemo = initialMemo ?? (manual ? null : summary?.memo ?? null);
-  const seedTodos =
+  const seedTodos: TodoDraftItem[] =
     initialTodos && initialTodos.length > 0
       ? initialTodos
       : manual
-        ? [""]
+        ? [{ text: "", color: null, tag: null }]
         : summary?.todos.length
-          ? summary.todos
-          : [""];
+          ? summary.todos.map((todo) => ({
+              text: todo.title,
+              color: null,
+              tag: null,
+            }))
+          : [{ text: "", color: null, tag: null }];
   const [dateValue, setDateValue] = useState(
     initialDate ?? initialMemo?.date ?? today.dateKey,
   );
   const [todoItems, setTodoItems] = useState(seedTodos);
+  const [tagDrafts, setTagDrafts] = useState<string[]>(
+    seedTodos.map(() => ""),
+  );
   const [dirty, setDirty] = useState(false);
+
+  function updateTodoItem(index: number, patch: Partial<TodoDraftItem>) {
+    setDirty(true);
+    setTodoItems((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item,
+      ),
+    );
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2525,7 +2569,6 @@ function EditorModal({
       const titleValue = String(formData.get("title") ?? "").trim();
       const bodyValue = String(formData.get("body") ?? "").trim();
 
-      // 제목만 입력해도 저장되도록 (검증 재현: 제목 입력 → 저장)
       if (!titleValue && !bodyValue) {
         return;
       }
@@ -2539,7 +2582,13 @@ function EditorModal({
       return;
     }
 
-    const todos = todoItems.map((value) => value.trim()).filter(Boolean);
+    const todos = todoItems
+      .map((item) => ({
+        text: item.text.trim(),
+        color: item.color,
+        tag: item.tag,
+      }))
+      .filter((item) => item.text);
 
     if (todos.length === 0) {
       return;
@@ -2587,44 +2636,139 @@ function EditorModal({
         ) : (
           <div className="todo-editor">
             {todoItems.map((todo, index) => (
-              <div key={`todo-edit-${index}`}>
-                <Icon name="checkbox" size={20} />
-                <input
-                  value={todo}
-                  placeholder="할 일을 입력하세요."
-                  onChange={(event) => {
-                    setDirty(true);
-                    const next = [...todoItems];
-                    next[index] = event.target.value;
-                    setTodoItems(next);
-                  }}
-                />
-                <button
-                  type="button"
-                  aria-label="할 일 삭제"
-                  onClick={() => {
-                    setDirty(true);
-                    setTodoItems((current) =>
-                      current.length === 1
-                        ? [""]
-                        : current.filter((_, itemIndex) => itemIndex !== index),
-                    );
-                  }}
-                >
-                  <Icon name="trash" />
-                </button>
+              <div key={`todo-edit-${index}`} className="todo-draft-card">
+                <div className="todo-draft-row">
+                  <span
+                    className="todo-check-button draft"
+                    style={
+                      todo.color
+                        ? { borderColor: todo.color, color: todo.color }
+                        : undefined
+                    }
+                  />
+                  <input
+                    value={todo.text}
+                    placeholder="할 일을 입력하세요."
+                    onChange={(event) =>
+                      updateTodoItem(index, { text: event.target.value })
+                    }
+                  />
+                  {!singleTodo && (
+                    <button
+                      type="button"
+                      aria-label="할 일 삭제"
+                      onClick={() => {
+                        setDirty(true);
+                        setTodoItems((current) =>
+                          current.length === 1
+                            ? [{ text: "", color: null, tag: null }]
+                            : current.filter(
+                                (_, itemIndex) => itemIndex !== index,
+                              ),
+                        );
+                        setTagDrafts((current) =>
+                          current.length === 1
+                            ? [""]
+                            : current.filter(
+                                (_, itemIndex) => itemIndex !== index,
+                              ),
+                        );
+                      }}
+                    >
+                      <Icon name="trash" />
+                    </button>
+                  )}
+                </div>
+                {manual && (
+                  <>
+                    <div className="todo-meta-row">
+                      <span>색상</span>
+                      <div className="todo-color-swatches">
+                        {TODO_COLOR_SWATCHES.map((color) => (
+                          <button
+                            key={color}
+                            type="button"
+                            className={`todo-color-swatch${
+                              todo.color === color ? " selected" : ""
+                            }`}
+                            style={{ backgroundColor: color }}
+                            aria-label={`${color} 색상`}
+                            onClick={() =>
+                              updateTodoItem(index, {
+                                color: todo.color === color ? null : color,
+                              })
+                            }
+                          >
+                            {todo.color === color ? (
+                              <span className="todo-color-check" />
+                            ) : null}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="todo-meta-row todo-tag-row">
+                      <span>태그</span>
+                      <div className="todo-tag-field">
+                        {todo.tag ? (
+                          <button
+                            type="button"
+                            className="todo-tag-chip editable"
+                            onClick={() => updateTodoItem(index, { tag: null })}
+                          >
+                            #{todo.tag.replace(/^#/, "")}
+                            <small aria-hidden>×</small>
+                          </button>
+                        ) : (
+                          <input
+                            value={tagDrafts[index] ?? ""}
+                            placeholder="#태그 입력 후 Enter"
+                            onChange={(event) => {
+                              const next = [...tagDrafts];
+                              next[index] = event.target.value;
+                              setTagDrafts(next);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key !== "Enter") {
+                                return;
+                              }
+                              event.preventDefault();
+                              const normalized = normalizeTodoTag(
+                                tagDrafts[index] ?? "",
+                              );
+                              if (!normalized) {
+                                return;
+                              }
+                              updateTodoItem(index, { tag: normalized });
+                              setTagDrafts((current) => {
+                                const next = [...current];
+                                next[index] = "";
+                                return next;
+                              });
+                            }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
-            <button
-              type="button"
-              className="ghost-add-button"
-              onClick={() => {
-                setDirty(true);
-                setTodoItems((current) => [...current, ""]);
-              }}
-            >
-              + 할 일 추가
-            </button>
+            {manual && !singleTodo && (
+              <button
+                type="button"
+                className="ghost-add-button"
+                onClick={() => {
+                  setDirty(true);
+                  setTodoItems((current) => [
+                    ...current,
+                    { text: "", color: null, tag: null },
+                  ]);
+                  setTagDrafts((current) => [...current, ""]);
+                }}
+              >
+                + 할 일 추가
+              </button>
+            )}
           </div>
         )}
         {onDelete && (
@@ -2633,6 +2777,68 @@ function EditorModal({
           </button>
         )}
       </form>
+    </ModalShell>
+  );
+}
+
+function ScheduleSummaryEditModal({
+  schedules,
+  onClose,
+  onSave,
+}: {
+  schedules: ScheduleSuggestion[];
+  onClose: () => void;
+  onSave: (schedules: ScheduleSuggestion[]) => void;
+}) {
+  const [items, setItems] = useState(schedules);
+
+  return (
+    <ModalShell>
+      <div className="schedule-summary-edit">
+        <div className="edit-topbar">
+          <button type="button" onClick={onClose}>
+            취소
+          </button>
+          <div className="schedule-summary-edit-title">
+            <strong>일정 수정</strong>
+            <p>AI가 제안한 일정을 확인 후, 삭제할 수 있어요.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onSave(items)}
+          >
+            저장
+          </button>
+        </div>
+        <div className="schedule-summary-edit-list">
+          {items.length === 0 ? (
+            <EmptyState text="등록할 일정이 없습니다" />
+          ) : (
+            items.map((schedule, index) => (
+              <article
+                key={`${schedule.title}-${schedule.date}-${index}`}
+                className="schedule-summary-edit-card"
+              >
+                <div>
+                  <strong>{schedule.title}</strong>
+                  <small>{formatScheduleShortLabel(schedule)}</small>
+                </div>
+                <button
+                  type="button"
+                  aria-label="일정 삭제"
+                  onClick={() =>
+                    setItems((current) =>
+                      current.filter((_, itemIndex) => itemIndex !== index),
+                    )
+                  }
+                >
+                  ×
+                </button>
+              </article>
+            ))
+          )}
+        </div>
+      </div>
     </ModalShell>
   );
 }
@@ -2994,6 +3200,33 @@ function formatScheduleTimeLabel(
     return " 종일";
   }
   return ` ${startTime}`;
+}
+
+function formatScheduleShortLabel(schedule: {
+  date: string;
+  startTime?: string | null;
+  isAllDay?: boolean;
+}) {
+  const [, month, day] = schedule.date.split("-");
+  const weekday = getWeekdayForDateKey(schedule.date);
+  const dateLabel = `${Number(month)}/${Number(day)}(${weekday})`;
+  if (schedule.isAllDay || !schedule.startTime) {
+    return `${dateLabel} 종일`;
+  }
+
+  const [hourText, minuteText = "00"] = schedule.startTime.split(":");
+  const hour = Number(hourText);
+  if (Number.isNaN(hour)) {
+    return `${dateLabel} ${schedule.startTime}`;
+  }
+  const period = hour < 12 ? "오전" : "오후";
+  const hour12 = hour % 12 || 12;
+  return `${dateLabel} ${period} ${hour12}:${minuteText.padStart(2, "0")}`;
+}
+
+function normalizeTodoTag(value: string) {
+  const normalized = value.trim().replace(/^#/, "").replace(/\s+/g, "");
+  return normalized.slice(0, 20);
 }
 
 function getProfileFromSession(session: Session | null): AppProfile {

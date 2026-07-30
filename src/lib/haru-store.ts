@@ -17,6 +17,8 @@ export type AppTodo = {
   date: string;
   text: string;
   done: boolean;
+  color: string | null;
+  tag: string | null;
 };
 
 export type AppSchedule = {
@@ -82,7 +84,20 @@ type TodoRow = {
   todo_date: string;
   text: string;
   completed: boolean;
+  color: string | null;
+  tag: string | null;
 };
+
+function mapTodoRow(todo: TodoRow): AppTodo {
+  return {
+    id: todo.id,
+    date: todo.todo_date,
+    text: todo.text,
+    done: todo.completed,
+    color: todo.color ?? null,
+    tag: todo.tag ?? null,
+  };
+}
 
 type ScheduleRow = {
   id: string;
@@ -123,7 +138,7 @@ export async function loadAppData(userId: string): Promise<AppData> {
         .order("created_at", { ascending: false }),
       supabase
         .from("todos")
-        .select("id, todo_date, text, completed")
+        .select("id, todo_date, text, completed, color, tag")
         .eq("user_id", userId)
         .order("todo_date", { ascending: false })
         .order("created_at", { ascending: true }),
@@ -169,12 +184,7 @@ export async function loadAppData(userId: string): Promise<AppData> {
       title: memo.title,
       body: memo.body,
     })),
-    todos: ((todosResult.data ?? []) as TodoRow[]).map((todo) => ({
-      id: todo.id,
-      date: todo.todo_date,
-      text: todo.text,
-      done: todo.completed,
-    })),
+    todos: ((todosResult.data ?? []) as TodoRow[]).map(mapTodoRow),
     schedules: ((schedulesResult.data ?? []) as ScheduleRow[]).map(
       (schedule) => ({
         id: schedule.id,
@@ -229,6 +239,8 @@ export async function createTodo(input: {
   userId: string;
   date: string;
   text: string;
+  color?: string | null;
+  tag?: string | null;
   source?: "manual" | "ai";
 }) {
   const { data, error } = await supabase
@@ -237,22 +249,18 @@ export async function createTodo(input: {
       user_id: input.userId,
       todo_date: input.date,
       text: input.text,
+      color: input.color ?? null,
+      tag: input.tag ?? null,
       source: input.source ?? "manual",
     })
-    .select("id, todo_date, text, completed")
+    .select("id, todo_date, text, completed, color, tag")
     .single();
 
   if (error) {
     throw error;
   }
 
-  const todo = data as TodoRow;
-  return {
-    id: todo.id,
-    date: todo.todo_date,
-    text: todo.text,
-    done: todo.completed,
-  };
+  return mapTodoRow(data as TodoRow);
 }
 
 export async function updateTodoCompleted(input: {
@@ -273,28 +281,26 @@ export async function updateTodo(input: {
   id: string;
   text: string;
   date: string;
+  color?: string | null;
+  tag?: string | null;
 }) {
   const { data, error } = await supabase
     .from("todos")
     .update({
       text: input.text,
       todo_date: input.date,
+      color: input.color ?? null,
+      tag: input.tag ?? null,
     })
     .eq("id", input.id)
-    .select("id, todo_date, text, completed")
+    .select("id, todo_date, text, completed, color, tag")
     .single();
 
   if (error) {
     throw error;
   }
 
-  const todo = data as TodoRow;
-  return {
-    id: todo.id,
-    date: todo.todo_date,
-    text: todo.text,
-    done: todo.completed,
-  };
+  return mapTodoRow(data as TodoRow);
 }
 
 export async function updateMemo(input: {

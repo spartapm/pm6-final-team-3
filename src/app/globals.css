@@ -563,13 +563,67 @@ button.calendar-cell {
 
 .todo-check-button {
   display: grid;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
   place-items: center;
-  border-radius: 10px;
+  border: 2px solid rgba(207, 200, 255, 0.7);
+  border-radius: 7px;
   background: transparent;
   color: #cfc8ff;
+  padding: 0;
+}
+
+.todo-check-button.checked {
+  border-color: #7e78a0;
+  background: #7e78a0;
+  color: #15122b;
+}
+
+.todo-check-button.draft {
+  pointer-events: none;
+}
+
+.todo-check-mark {
+  width: 10px;
+  height: 6px;
+  border-left: 2px solid #15122b;
+  border-bottom: 2px solid #15122b;
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+
+.todo-row-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.todo-tag-chip {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #d9d9d945;
+  border-radius: 999px;
+  background: #d9d9d922;
+  color: #d9d9d9;
+  padding: 3px 8px;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: var(--weight-label);
+}
+
+.todo-tag-chip.done {
+  opacity: 0.55;
+}
+
+.todo-tag-chip.editable {
+  background: #d9d9d922;
+}
+
+.todo-tag-chip small {
+  font-size: 12px;
+  line-height: 1;
 }
 
 .todo-check-button .ui-icon-asset,
@@ -614,8 +668,183 @@ button.calendar-cell {
 }
 
 .todo-row em.done {
-  color: rgba(216, 210, 240, 0.42);
+  color: #7e78a0;
   text-decoration: line-through;
+}
+
+.summary-schedule-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.summary-schedule-list li {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(180, 166, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(75, 67, 135, 0.35);
+  padding: 12px 14px;
+}
+
+.summary-schedule-list strong {
+  color: #eeeaff;
+  font-size: var(--font-body);
+  font-weight: var(--weight-label);
+}
+
+.summary-schedule-list small {
+  color: var(--muted);
+  font-size: var(--font-caption);
+}
+
+.schedule-summary-edit {
+  display: grid;
+  gap: 18px;
+}
+
+.schedule-summary-edit-title {
+  display: grid;
+  gap: 4px;
+  text-align: center;
+}
+
+.schedule-summary-edit-title p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-micro);
+  font-weight: var(--weight-body);
+}
+
+.schedule-summary-edit-list {
+  display: grid;
+  gap: 10px;
+  max-height: min(58vh, 420px);
+  overflow-y: auto;
+}
+
+.schedule-summary-edit-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(180, 166, 255, 0.16);
+  border-radius: 16px;
+  background: rgba(55, 47, 102, 0.72);
+  padding: 14px 14px 14px 16px;
+}
+
+.schedule-summary-edit-card strong,
+.schedule-summary-edit-card small {
+  display: block;
+}
+
+.schedule-summary-edit-card strong {
+  color: #eeeaff;
+  font-size: var(--font-body);
+  font-weight: var(--weight-label);
+}
+
+.schedule-summary-edit-card small {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: var(--font-caption);
+}
+
+.schedule-summary-edit-card button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ddd7ff;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.todo-draft-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(180, 166, 255, 0.16);
+  border-radius: 18px;
+  background: rgba(55, 47, 102, 0.55);
+  padding: 14px;
+}
+
+.todo-draft-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.todo-draft-row input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+}
+
+.todo-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: var(--font-caption);
+  font-weight: var(--weight-label);
+}
+
+.todo-meta-row > span {
+  flex: 0 0 36px;
+}
+
+.todo-color-swatches {
+  display: flex;
+  gap: 10px;
+}
+
+.todo-color-swatch {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  padding: 0;
+}
+
+.todo-color-swatch.selected {
+  box-shadow: 0 0 0 3px rgba(127, 176, 240, 0.28);
+}
+
+.todo-color-check {
+  width: 8px;
+  height: 5px;
+  border-left: 2px solid #15122b;
+  border-bottom: 2px solid #15122b;
+  transform: rotate(-45deg) translateY(-1px);
+}
+
+.todo-tag-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.todo-tag-field input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+}
+
+.todo-tag-field input::placeholder {
+  color: rgba(217, 217, 217, 0.45);
 }
 
 .ghost-add-button {
@@ -2008,11 +2237,9 @@ button.calendar-cell {
   line-height: 1.65;
 }
 
-.todo-editor > div {
+.todo-editor > .todo-draft-card {
   display: grid;
-  grid-template-columns: 24px 1fr 32px;
-  align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 .todo-editor span {
