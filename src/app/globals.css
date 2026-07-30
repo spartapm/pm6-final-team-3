@@ -736,19 +736,31 @@ button.calendar-cell {
   padding: 14px 14px 14px 16px;
 }
 
-.schedule-summary-edit-card strong,
-.schedule-summary-edit-card small {
-  display: block;
+.schedule-summary-edit-fields {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
 }
 
-.schedule-summary-edit-card strong {
+.schedule-summary-title-input {
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
   color: #eeeaff;
+  padding: 8px 10px;
   font-size: var(--font-body);
   font-weight: var(--weight-label);
+  outline: none;
+}
+
+.schedule-summary-title-input:focus {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .schedule-summary-edit-card small {
-  margin-top: 6px;
+  display: block;
   color: var(--muted);
   font-size: var(--font-caption);
 }

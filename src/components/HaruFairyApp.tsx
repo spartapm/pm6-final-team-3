@@ -75,8 +75,7 @@ type ModalType =
   | "saved"
   | "logout"
   | "deleteSchedule"
-  | "deleteMemo"
-  | "deleteTodo";
+  | "deleteMemo";
 
 const TODO_COLOR_SWATCHES = [
   "#F2766E",
@@ -212,7 +211,6 @@ export function HaruFairyApp() {
   const [editingMemo, setEditingMemo] = useState<Memo | null>(null);
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
   const [editingScheduleIndex, setEditingScheduleIndex] = useState<number | null>(null);
-  const [deletingTodoId, setDeletingTodoId] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -761,6 +759,20 @@ export function HaruFairyApp() {
     }
   }
 
+  async function removeTodoNow(todoId: string) {
+    try {
+      if (isGuestUser(requireUserId())) {
+        guestDeleteTodo(todoId);
+      } else {
+        await deleteTodo(todoId);
+      }
+      setTodos((current) => current.filter((item) => item.id !== todoId));
+      showToast("할 일이 삭제되었어요.");
+    } catch (error) {
+      setAppError(getErrorMessage(error));
+    }
+  }
+
   function closeModal() {
     setCancelConfirmOpen(false);
     setModal(null);
@@ -768,7 +780,6 @@ export function HaruFairyApp() {
     setEditingMemo(null);
     setEditingTodo(null);
     setEditingScheduleIndex(null);
-    setDeletingTodoId(null);
   }
 
   function getActorId() {
@@ -857,8 +868,7 @@ export function HaruFairyApp() {
                 setModal("todoItemEdit");
               }}
               onDeleteTodo={(todoId) => {
-                setDeletingTodoId(todoId);
-                setModal("deleteTodo");
+                void removeTodoNow(todoId);
               }}
             />
           )}
@@ -957,8 +967,7 @@ export function HaruFairyApp() {
                 setModal("todoItemEdit");
               }}
               onDeleteTodo={(todoId) => {
-                setDeletingTodoId(todoId);
-                setModal("deleteTodo");
+                void removeTodoNow(todoId);
               }}
             />
           )}
@@ -1419,29 +1428,6 @@ export function HaruFairyApp() {
         />
       )}
 
-      {modal === "deleteTodo" && deletingTodoId && (
-        <ConfirmModal
-          title="할 일을 삭제할까요?"
-          description="삭제한 할 일은 되돌릴 수 없어요."
-          onCancel={closeModal}
-          onConfirm={async () => {
-            try {
-              if (isGuestUser(requireUserId())) {
-                guestDeleteTodo(deletingTodoId);
-              } else {
-                await deleteTodo(deletingTodoId);
-              }
-              setTodos((current) =>
-                current.filter((item) => item.id !== deletingTodoId),
-              );
-              closeModal();
-              showToast("할 일이 삭제되었어요.");
-            } catch (error) {
-              setAppError(getErrorMessage(error));
-            }
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -1704,6 +1690,11 @@ function ChatScreen({
         <ResultCard title={SUMMARY_TITLES.memo} onEdit={onEditMemo}>
           <div className="suggestion-card">
             <p>{summary.memo.body}</p>
+            <p>
+              {summary.memo.accepted === false
+                ? "이 메모는 무시됩니다."
+                : "이 메모가 기록에 등록됩니다."}
+            </p>
             <div className="suggestion-actions">
               <button
                 type="button"
@@ -2792,6 +2783,14 @@ function ScheduleSummaryEditModal({
 }) {
   const [items, setItems] = useState(schedules);
 
+  function updateTitle(index: number, title: string) {
+    setItems((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, title } : item,
+      ),
+    );
+  }
+
   return (
     <ModalShell>
       <div className="schedule-summary-edit">
@@ -2805,7 +2804,13 @@ function ScheduleSummaryEditModal({
           </div>
           <button
             type="button"
-            onClick={() => onSave(items)}
+            onClick={() =>
+              onSave(
+                items
+                  .map((item) => ({ ...item, title: item.title.trim() }))
+                  .filter((item) => item.title),
+              )
+            }
           >
             저장
           </button>
@@ -2816,11 +2821,17 @@ function ScheduleSummaryEditModal({
           ) : (
             items.map((schedule, index) => (
               <article
-                key={`${schedule.title}-${schedule.date}-${index}`}
+                key={`${schedule.date}-${index}`}
                 className="schedule-summary-edit-card"
               >
-                <div>
-                  <strong>{schedule.title}</strong>
+                <div className="schedule-summary-edit-fields">
+                  <input
+                    className="schedule-summary-title-input"
+                    value={schedule.title}
+                    placeholder="일정 제목"
+                    maxLength={40}
+                    onChange={(event) => updateTitle(index, event.target.value)}
+                  />
                   <small>{formatScheduleShortLabel(schedule)}</small>
                 </div>
                 <button
